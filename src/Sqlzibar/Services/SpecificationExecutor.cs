@@ -1,0 +1,126 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Sqlzibar.Interfaces;
+using Sqlzibar.Specifications;
+
+namespace Sqlzibar.Services;
+
+public class SpecificationExecutor : ISpecificationExecutor
+{
+    private readonly ISqlzibarAuthService _authorizationService;
+    private readonly ILogger<SpecificationExecutor> _logger;
+
+    public SpecificationExecutor(
+        ISqlzibarAuthService authorizationService,
+        ILogger<SpecificationExecutor> logger)
+    {
+        _authorizationService = authorizationService;
+        _logger = logger;
+    }
+
+    public async Task<PaginatedResult<TDto>> ExecuteAsync<TEntity, TDto>(
+        DbSet<TEntity> dbSet,
+        PagedSpecification<TEntity> specification,
+        string principalId,
+        Func<TEntity, TDto> selector,
+        CancellationToken cancellationToken = default)
+        where TEntity : class, IHasResourceId
+    {
+        if (string.IsNullOrEmpty(specification.RequiredPermission))
+        {
+            throw new InvalidOperationException(
+                $"Specification {specification.GetType().Name} must define RequiredPermission to use this overload.");
+        }
+
+        var query = specification.ConfigureQuery(dbSet.AsQueryable());
+
+        return await ExecuteAsync(
+            query, specification, principalId, specification.RequiredPermission,
+            selector, cancellationToken);
+    }
+
+    public async Task<PaginatedResult<TDto>> ExecuteAsync<TEntity, TDto>(
+        IQueryable<TEntity> query,
+        PagedSpecification<TEntity> specification,
+        string principalId,
+        string permissionKey,
+        Func<TEntity, TDto> selector,
+        CancellationToken cancellationToken = default)
+        where TEntity : class, IHasResourceId
+    {
+        var authFilter = await _authorizationService.GetAuthorizationFilterAsync<TEntity>(
+            principalId, permissionKey);
+
+        query = query.Where(authFilter);
+
+        var userFilter = specification.ToExpression();
+        query = query.Where(userFilter);
+
+        if (!string.IsNullOrEmpty(specification.Cursor))
+        {
+            var cursorFilter = specification.GetCursorFilter(specification.Cursor);
+            query = query.Where(cursorFilter);
+        }
+
+        query = specification.ApplySort(query);
+        query = query.Take(specification.SafePageSize + 1);
+
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            try
+            {
+                var sql = query.ToQueryString();
+                _logger.LogDebug("Executing specification {SpecificationType} - Generated SQL:\n{Sql}",
+                    specification.GetType().Name, sql);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not generate SQL string for logging");
+            }
+        }
+
+        var entities = await query.ToListAsync(cancellationToken);
+
+        var hasMore = entities.Count > specification.SafePageSize;
+        if (hasMore)
+        {
+            entities = entities.Take(specification.SafePageSize).ToList();
+        }
+
+        var dtos = entities.Select(selector).ToList();
+
+        string? nextCursor = null;
+        if (hasMore && entities.Count > 0)
+        {
+            nextCursor = specification.BuildCursor(entities[^1]);
+        }
+
+        return PaginatedResult<TDto>.Create(dtos, specification.SafePageSize, nextCursor);
+    }
+
+    public async Task<long> CountAsync<TEntity>(
+        DbSet<TEntity> dbSet,
+        PagedSpecification<TEntity> specification,
+        string principalId,
+        CancellationToken cancellationToken = default)
+        where TEntity : class, IHasResourceId
+    {
+        if (string.IsNullOrEmpty(specification.RequiredPermission))
+        {
+            throw new InvalidOperationException(
+                $"Specification {specification.GetType().Name} must define RequiredPermission to use this overload.");
+        }
+
+        var query = specification.ConfigureQuery(dbSet.AsQueryable());
+
+        var authFilter = await _authorizationService.GetAuthorizationFilterAsync<TEntity>(
+            principalId, specification.RequiredPermission);
+
+        query = query.Where(authFilter);
+
+        var userFilter = specification.ToExpression();
+        query = query.Where(userFilter);
+
+        return await query.LongCountAsync(cancellationToken);
+    }
+}

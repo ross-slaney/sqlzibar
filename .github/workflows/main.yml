@@ -1,0 +1,115 @@
+name: Main Branch CI
+
+on:
+  push:
+    branches: [main]
+
+env:
+  DOTNET_VERSION: "9.0.x"
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      - run: chmod +x scripts/*.sh && ./scripts/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            **/bin/**
+            **/obj/**
+
+  unit-tests:
+    name: Unit Tests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+      - run: chmod +x scripts/*.sh && ./scripts/unit-tests.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: TestResults/Unit/**
+
+  integration-tests:
+    name: Integration Tests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+      - run: docker pull mcr.microsoft.com/mssql/server:2022-latest
+        continue-on-error: true
+      - run: chmod +x scripts/*.sh && ./scripts/integration-tests.sh
+        env:
+          ASPIRE_ALLOW_UNSECURED_TRANSPORT: "true"
+        timeout-minutes: 15
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: TestResults/Integration/**
+
+  merge-coverage:
+    name: Merge Coverage
+    needs: [unit-tests, integration-tests]
+    runs-on: ubuntu-latest
+    if: always() && (needs.unit-tests.result == 'success' || needs.integration-tests.result == 'success')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: unit-test-results
+          path: TestResults/Unit
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: integration-test-results
+          path: TestResults/Integration
+        continue-on-error: true
+      - run: chmod +x scripts/*.sh && ./scripts/merge-coverage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: TestResults/**

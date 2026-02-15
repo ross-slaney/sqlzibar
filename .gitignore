@@ -1,0 +1,109 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.vs/
+.vs/
+*.swp
+*~
+*.sln.docstates
+*.userosscache
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+
+## Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio
+.vs/
+*.vsidx
+*.vspscc
+*.vsp
+*.vsscc
+*.vssscc
+*.vsuo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Rider
+.idea/
+*.sln.iml
+
+## Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+## Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+## Database
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+## OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+## Aspire
+.apphost/
+*.dcp.yaml
+*.dcp.json
+
+## Logs
+logs/
+*.log
+
+## Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+## Coverage
+/coverage/
+*.coverage
+*.lcov
+
+## Test results
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx

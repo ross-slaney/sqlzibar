@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sqlzibar Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Sqlzibar</h1>
+        <nav>
+            <a href="#" data-view="resources" class="active">Resources</a>
+            <a href="#" data-view="principals">Principals</a>
+            <a href="#" data-view="grants">Grants</a>
+            <a href="#" data-view="roles">Roles</a>
+            <a href="#" data-view="permissions">Permissions</a>
+            <a href="#" data-view="access-tester">Access Tester</a>
+        </nav>
+    </header>
+    <main>
+        <div id="stats" class="stats-bar"></div>
+        <div id="content"></div>
+    </main>
+    <script src="app.js"></script>
+</body>
+</html>
