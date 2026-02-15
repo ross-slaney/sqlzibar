@@ -497,7 +497,7 @@ public class QueryFilteringTests
         allNames.Should().Contain("Walmart").And.Contain("Target");
         // No duplicates
         allNames.Should().OnlyHaveUniqueItems();
-        // Sorted alphabetically (Name is the sort key in GetChainsSpecification)
+        // Sorted alphabetically (Name is the sort key for the chains endpoint)
         allNames.Should().BeInAscendingOrder();
     }
 

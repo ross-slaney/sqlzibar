@@ -4,9 +4,9 @@ using Sqlzibar.Example.Api.Dtos;
 using Sqlzibar.Example.Api.Middleware;
 using Sqlzibar.Example.Api.Models;
 using Sqlzibar.Example.Api.Seeding;
-using Sqlzibar.Example.Api.Specifications;
 using Sqlzibar.Interfaces;
 using Sqlzibar.Models;
+using Sqlzibar.Specifications;
 
 namespace Sqlzibar.Example.Api.Endpoints;
 
@@ -25,7 +25,20 @@ public static class ChainEndpoints
             string? cursor = null) =>
         {
             var principalId = http.GetPrincipalId();
-            var spec = new GetChainsSpecification(pageSize, search) { Cursor = cursor };
+
+            var builder = PagedSpec.For<Chain>(c => c.Id)
+                .RequirePermission(RetailPermissionKeys.ChainView)
+                .SortByString("name", c => c.Name, isDefault: true)
+                .Configure(q => q.Include(c => c.Locations));
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.ToLower();
+                builder = builder.Where(c => c.Name.ToLower().Contains(s) ||
+                                             (c.Description != null && c.Description.ToLower().Contains(s)));
+            }
+
+            var spec = builder.Build(pageSize, cursor);
             var result = await executor.ExecuteAsync(
                 context.Chains, spec, principalId,
                 c => new ChainDto
