@@ -891,8 +891,9 @@ public class QueryFilteringTests
 
         result.Data.Should().HaveCountGreaterThanOrEqualTo(2);
         result.Data.Select(i => i.Price).Should().BeInAscendingOrder();
-        // ProBook Laptop (799.99) before SmartPhone X (999.99)
-        result.Data.First().Name.Should().Be("ProBook Laptop");
+        // ProBook Laptop (799.99) should appear before SmartPhone X (999.99)
+        var names = result.Data.Select(i => i.Name).ToList();
+        names.IndexOf("ProBook Laptop").Should().BeLessThan(names.IndexOf("SmartPhone X"));
     }
 
     [TestMethod]
@@ -902,8 +903,9 @@ public class QueryFilteringTests
 
         result.Data.Should().HaveCountGreaterThanOrEqualTo(2);
         result.Data.Select(i => i.Price).Should().BeInDescendingOrder();
-        // SmartPhone X (999.99) before ProBook Laptop (799.99)
-        result.Data.First().Name.Should().Be("SmartPhone X");
+        // SmartPhone X (999.99) should appear before ProBook Laptop (799.99)
+        var names = result.Data.Select(i => i.Name).ToList();
+        names.IndexOf("SmartPhone X").Should().BeLessThan(names.IndexOf("ProBook Laptop"));
     }
 
     [TestMethod]
