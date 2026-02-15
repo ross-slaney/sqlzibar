@@ -22,13 +22,17 @@ public static class ChainEndpoints
             HttpContext http,
             int pageSize = 10,
             string? search = null,
-            string? cursor = null) =>
+            string? cursor = null,
+            string? sortBy = null,
+            string? sortDir = null) =>
         {
             var principalId = http.GetPrincipalId();
+            var descending = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
 
             var builder = PagedSpec.For<Chain>(c => c.Id)
                 .RequirePermission(RetailPermissionKeys.ChainView)
                 .SortByString("name", c => c.Name, isDefault: true)
+                .SortByString("description", c => c.Description ?? "")
                 .Configure(q => q.Include(c => c.Locations));
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -38,7 +42,7 @@ public static class ChainEndpoints
                                              (c.Description != null && c.Description.ToLower().Contains(s)));
             }
 
-            var spec = builder.Build(pageSize, cursor);
+            var spec = builder.Build(pageSize, cursor, sortBy, descending);
             var result = await executor.ExecuteAsync(
                 context.Chains, spec, principalId,
                 c => new ChainDto

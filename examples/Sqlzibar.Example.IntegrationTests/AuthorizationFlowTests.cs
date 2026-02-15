@@ -74,7 +74,7 @@ public class AuthorizationFlowTests
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/chains");
         request.Headers.Add("X-Principal-Id", "prin_company_admin");
-        request.Content = JsonContent.Create(new { Name = "Costco", Description = "Wholesale club" });
+        request.Content = JsonContent.Create(new { Name = "Publix", Description = "Supermarket chain" });
 
         var response = await _client.SendAsync(request);
 

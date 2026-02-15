@@ -31,6 +31,9 @@ public class RetailSeedService
     // Well-known resource IDs
     public const string WalmartChainResourceId = "res_chain_walmart";
     public const string TargetChainResourceId = "res_chain_target";
+    public const string CostcoChainResourceId = "res_chain_costco";
+    public const string KrogerChainResourceId = "res_chain_kroger";
+    public const string AldiChainResourceId = "res_chain_aldi";
     public const string Store001ResourceId = "res_location_001";
     public const string Store002ResourceId = "res_location_002";
     public const string Store100ResourceId = "res_location_100";
@@ -117,7 +120,10 @@ public class RetailSeedService
         // Chains
         _context.Set<SqlzibarResource>().AddRange(
             new SqlzibarResource { Id = WalmartChainResourceId, ParentId = "retail_root", Name = "Walmart", ResourceTypeId = RetailResourceTypeIds.Chain },
-            new SqlzibarResource { Id = TargetChainResourceId, ParentId = "retail_root", Name = "Target", ResourceTypeId = RetailResourceTypeIds.Chain }
+            new SqlzibarResource { Id = TargetChainResourceId, ParentId = "retail_root", Name = "Target", ResourceTypeId = RetailResourceTypeIds.Chain },
+            new SqlzibarResource { Id = CostcoChainResourceId, ParentId = "retail_root", Name = "Costco", ResourceTypeId = RetailResourceTypeIds.Chain },
+            new SqlzibarResource { Id = KrogerChainResourceId, ParentId = "retail_root", Name = "Kroger", ResourceTypeId = RetailResourceTypeIds.Chain },
+            new SqlzibarResource { Id = AldiChainResourceId, ParentId = "retail_root", Name = "Aldi", ResourceTypeId = RetailResourceTypeIds.Chain }
         );
         await _context.SaveChangesAsync(ct);
 
@@ -159,7 +165,31 @@ public class RetailSeedService
             Description = "Target Corporation",
             HeadquartersAddress = "1000 Nicollet Mall, Minneapolis, MN 55403"
         };
-        _context.Chains.AddRange(walmartChain, targetChain);
+        var costcoChain = new Chain
+        {
+            Id = "chain_costco",
+            ResourceId = CostcoChainResourceId,
+            Name = "Costco",
+            Description = "Costco Wholesale Corporation",
+            HeadquartersAddress = "999 Lake Dr, Issaquah, WA 98027"
+        };
+        var krogerChain = new Chain
+        {
+            Id = "chain_kroger",
+            ResourceId = KrogerChainResourceId,
+            Name = "Kroger",
+            Description = "The Kroger Co.",
+            HeadquartersAddress = "1014 Vine St, Cincinnati, OH 45202"
+        };
+        var aldiChain = new Chain
+        {
+            Id = "chain_aldi",
+            ResourceId = AldiChainResourceId,
+            Name = "Aldi",
+            Description = "Aldi Inc.",
+            HeadquartersAddress = "1200 N Kirk Rd, Batavia, IL 60510"
+        };
+        _context.Chains.AddRange(walmartChain, targetChain, costcoChain, krogerChain, aldiChain);
 
         var store001 = new Location
         {

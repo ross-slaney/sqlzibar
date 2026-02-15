@@ -24,9 +24,12 @@ namespace Sqlzibar.Example.IntegrationTests;
 ///     │     │     └── inv_phone   (SmartPhone X, SKU: ELEC-PHONE-001)
 ///     │     └── res_location_002 (StoreManager 002)
 ///     │           └── inv_tablet  (TabPro 11, SKU: ELEC-TABLET-001)
-///     └── res_chain_target (ChainManager Target)
-///           └── res_location_100
-///                 └── inv_headphones (BassMax Headphones, SKU: AUDIO-HP-001)
+///     ├── res_chain_target (ChainManager Target)
+///     │     └── res_location_100
+///     │           └── inv_headphones (BassMax Headphones, SKU: AUDIO-HP-001)
+///     ├── res_chain_costco
+///     ├── res_chain_kroger
+///     └── res_chain_aldi
 /// </summary>
 [TestClass]
 public class QueryFilteringTests
@@ -492,13 +495,131 @@ public class QueryFilteringTests
             cursor = page.NextCursor;
         }
 
-        // Should have at least the 2 seeded chains
-        allNames.Should().HaveCountGreaterThanOrEqualTo(2);
-        allNames.Should().Contain("Walmart").And.Contain("Target");
+        // Should have at least the 5 seeded chains
+        allNames.Should().HaveCountGreaterThanOrEqualTo(5);
+        allNames.Should().Contain("Walmart").And.Contain("Target")
+            .And.Contain("Costco").And.Contain("Kroger").And.Contain("Aldi");
         // No duplicates
         allNames.Should().OnlyHaveUniqueItems();
         // Sorted alphabetically (Name is the sort key for the chains endpoint)
         allNames.Should().BeInAscendingOrder();
+    }
+
+    // ====================================================================
+    // CHAIN SORT + FILTER (builder-based specification)
+    // ====================================================================
+
+    [TestMethod]
+    public async Task Chains_SortByNameDesc_ReturnsDescendingOrder()
+    {
+        var result = await GetChainsAsync(CompanyAdmin, sortBy: "name", sortDir: "desc");
+        var names = result.Data.Select(c => c.Name).ToList();
+
+        names.Should().HaveCountGreaterThanOrEqualTo(5);
+        names.Should().BeInDescendingOrder();
+        names.First().Should().Be("Walmart"); // W comes last in desc
+    }
+
+    [TestMethod]
+    public async Task Chains_SortByDescriptionAsc_ReturnsSortedByDescription()
+    {
+        var result = await GetChainsAsync(CompanyAdmin, sortBy: "description");
+        var descriptions = result.Data.Select(c => c.Description).ToList();
+
+        // Aldi Inc. < Costco Wholesale... < The Kroger Co. < Target Corp. < Walmart Inc.
+        descriptions.Should().HaveCountGreaterThanOrEqualTo(5);
+        descriptions.Should().BeInAscendingOrder();
+    }
+
+    [TestMethod]
+    public async Task Chains_SortByDescriptionDesc_ReturnsReverseSortedByDescription()
+    {
+        var result = await GetChainsAsync(CompanyAdmin, sortBy: "description", sortDir: "desc");
+        var descriptions = result.Data.Select(c => c.Description).ToList();
+
+        descriptions.Should().HaveCountGreaterThanOrEqualTo(5);
+        descriptions.Should().BeInDescendingOrder();
+    }
+
+    [TestMethod]
+    public async Task Chains_SearchPlusSortByNameDesc_FiltersThenSorts()
+    {
+        // "co" matches: Costco (name), Target Corporation (desc), Costco Wholesale Corporation (desc)
+        // Name desc among matches: Target, Costco
+        var result = await GetChainsAsync(CompanyAdmin, search: "co", sortBy: "name", sortDir: "desc");
+        var names = result.Data.Select(c => c.Name).ToList();
+
+        names.Should().Contain("Costco");
+        names.Should().BeInDescendingOrder();
+        // "Aldi" and "Walmart" should NOT appear (no "co" in name or description)
+        names.Should().NotContain("Aldi");
+        names.Should().NotContain("Walmart");
+    }
+
+    [TestMethod]
+    public async Task Chains_SearchPlusSortByDescription_FiltersThenSortsByDescription()
+    {
+        // "inc" matches: Walmart Inc. (desc), Aldi Inc. (desc)
+        var result = await GetChainsAsync(CompanyAdmin, search: "inc", sortBy: "description");
+        var descriptions = result.Data.Select(c => c.Description).ToList();
+
+        descriptions.Should().HaveCountGreaterThanOrEqualTo(2);
+        descriptions.Should().Contain("Aldi Inc.");
+        descriptions.Should().Contain("Walmart Inc.");
+        descriptions.Should().BeInAscendingOrder(); // Aldi Inc. before Walmart Inc.
+    }
+
+    [TestMethod]
+    public async Task Chains_PaginationPlusSortByNameDesc_AllPagesCorrectOrder()
+    {
+        // Walk all pages one at a time, sorted by name descending
+        var allNames = new List<string>();
+        string? cursor = null;
+        for (var i = 0; i < 20; i++)
+        {
+            var page = await GetChainsAsync(CompanyAdmin, pageSize: 2, cursor: cursor,
+                sortBy: "name", sortDir: "desc");
+            allNames.AddRange(page.Data.Select(c => c.Name));
+            if (!page.HasNextPage) break;
+            cursor = page.NextCursor;
+        }
+
+        allNames.Should().HaveCountGreaterThanOrEqualTo(5);
+        allNames.Should().OnlyHaveUniqueItems();
+        allNames.Should().BeInDescendingOrder();
+    }
+
+    [TestMethod]
+    public async Task Chains_PaginationPlusSortByDescription_AllPagesCorrectOrder()
+    {
+        // Walk all pages one at a time, sorted by description ascending
+        var allDescriptions = new List<string>();
+        string? cursor = null;
+        for (var i = 0; i < 20; i++)
+        {
+            var page = await GetChainsAsync(CompanyAdmin, pageSize: 2, cursor: cursor, sortBy: "description");
+            allDescriptions.AddRange(page.Data.Select(c => c.Description!));
+            if (!page.HasNextPage) break;
+            cursor = page.NextCursor;
+        }
+
+        allDescriptions.Should().HaveCountGreaterThanOrEqualTo(5);
+        allDescriptions.Should().OnlyHaveUniqueItems();
+        allDescriptions.Should().BeInAscendingOrder();
+    }
+
+    [TestMethod]
+    public async Task Chains_SortDoesNotBypassAuth_ChainManagerSeesOnlyTheirChain()
+    {
+        // ChainManager for Walmart only has access to Walmart, regardless of sort
+        var nameAsc = await GetChainsAsync(ChainMgrWalmart, sortBy: "name");
+        nameAsc.Data.Should().ContainSingle().Which.Name.Should().Be("Walmart");
+
+        var nameDesc = await GetChainsAsync(ChainMgrWalmart, sortBy: "name", sortDir: "desc");
+        nameDesc.Data.Should().ContainSingle().Which.Name.Should().Be("Walmart");
+
+        var descSort = await GetChainsAsync(ChainMgrWalmart, sortBy: "description");
+        descSort.Data.Should().ContainSingle().Which.Name.Should().Be("Walmart");
     }
 
     [TestMethod]
@@ -1069,12 +1190,15 @@ public class QueryFilteringTests
     // ====================================================================
 
     private async Task<PaginatedResult<ChainItem>> GetChainsAsync(
-        string principalId, string? search = null, int? pageSize = null, string? cursor = null)
+        string principalId, string? search = null, int? pageSize = null, string? cursor = null,
+        string? sortBy = null, string? sortDir = null)
     {
         var url = "/api/chains?";
         if (pageSize.HasValue) url += $"pageSize={pageSize}&";
         if (search != null) url += $"search={search}&";
         if (cursor != null) url += $"cursor={Uri.EscapeDataString(cursor)}&";
+        if (sortBy != null) url += $"sortBy={sortBy}&";
+        if (sortDir != null) url += $"sortDir={sortDir}&";
         url = url.TrimEnd('&', '?');
 
         var request = new HttpRequestMessage(HttpMethod.Get, url);
