@@ -26,11 +26,7 @@ public class GetInventoryItemsSpecification : SortablePagedSpecification<Invento
         if (locationId != null)
             AddFilter(i => i.LocationId == locationId);
 
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var s = search.ToLower();
-            AddFilter(i => i.Name.ToLower().Contains(s) || i.Sku.ToLower().Contains(s));
-        }
+        Search(search, i => i.Name, i => i.Sku);
     }
 
     public override string? RequiredPermission => RetailPermissionKeys.InventoryView;

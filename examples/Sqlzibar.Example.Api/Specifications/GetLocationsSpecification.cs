@@ -16,12 +16,7 @@ public class GetLocationsSpecification : SortablePagedSpecification<Location>
         if (chainId != null)
             AddFilter(l => l.ChainId == chainId);
 
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var s = search.ToLower();
-            AddFilter(l => l.Name.ToLower().Contains(s) ||
-                           (l.StoreNumber != null && l.StoreNumber.ToLower().Contains(s)));
-        }
+        Search(search, l => l.Name, l => l.StoreNumber);
     }
 
     public override string? RequiredPermission => RetailPermissionKeys.LocationView;

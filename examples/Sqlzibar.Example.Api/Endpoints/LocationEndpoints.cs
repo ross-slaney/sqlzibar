@@ -5,8 +5,8 @@ using Sqlzibar.Example.Api.Middleware;
 using Sqlzibar.Example.Api.Models;
 using Sqlzibar.Example.Api.Seeding;
 using Sqlzibar.Example.Api.Specifications;
+using Sqlzibar.Extensions;
 using Sqlzibar.Interfaces;
-using Sqlzibar.Models;
 
 namespace Sqlzibar.Example.Api.Endpoints;
 
@@ -50,33 +50,28 @@ public static class LocationEndpoints
             ISqlzibarAuthService authService,
             HttpContext http) =>
         {
-            var location = await context.Locations
-                .Include(l => l.Chain)
-                .Include(l => l.InventoryItems)
-                .FirstOrDefaultAsync(l => l.Id == id);
-
-            if (location is null) return Results.NotFound();
-
             var principalId = http.GetPrincipalId();
-            var access = await authService.CheckAccessAsync(principalId, RetailPermissionKeys.LocationView, location.ResourceId);
-            if (!access.Allowed) return Results.Json(new { error = "Permission denied" }, statusCode: 403);
 
-            return Results.Ok(new LocationDetailDto
-            {
-                Id = location.Id,
-                ResourceId = location.ResourceId,
-                ChainId = location.ChainId,
-                ChainName = location.Chain?.Name,
-                Name = location.Name,
-                StoreNumber = location.StoreNumber,
-                Address = location.Address,
-                City = location.City,
-                State = location.State,
-                ZipCode = location.ZipCode,
-                InventoryItemCount = location.InventoryItems.Count,
-                CreatedAt = location.CreatedAt,
-                UpdatedAt = location.UpdatedAt
-            });
+            return await authService.AuthorizedDetailAsync(
+                context.Locations.Include(l => l.Chain).Include(l => l.InventoryItems),
+                l => l.Id == id,
+                principalId, RetailPermissionKeys.LocationView,
+                location => new LocationDetailDto
+                {
+                    Id = location.Id,
+                    ResourceId = location.ResourceId,
+                    ChainId = location.ChainId,
+                    ChainName = location.Chain?.Name,
+                    Name = location.Name,
+                    StoreNumber = location.StoreNumber,
+                    Address = location.Address,
+                    City = location.City,
+                    State = location.State,
+                    ZipCode = location.ZipCode,
+                    InventoryItemCount = location.InventoryItems.Count,
+                    CreatedAt = location.CreatedAt,
+                    UpdatedAt = location.UpdatedAt
+                });
         }).WithName("GetLocation");
 
         group.MapPost("/chains/{chainId}/locations", async (
@@ -88,22 +83,13 @@ public static class LocationEndpoints
         {
             var principalId = http.GetPrincipalId();
 
-            // Find the chain and its resource
             var chain = await context.Chains.FirstOrDefaultAsync(c => c.Id == chainId);
             if (chain is null) return Results.NotFound();
 
             var access = await authService.CheckAccessAsync(principalId, RetailPermissionKeys.LocationEdit, chain.ResourceId);
             if (!access.Allowed) return Results.Json(new { error = "Permission denied" }, statusCode: 403);
 
-            var resourceId = $"res_loc_{Guid.NewGuid():N}"[..30];
-            var resource = new SqlzibarResource
-            {
-                Id = resourceId,
-                ParentId = chain.ResourceId,
-                Name = request.Name,
-                ResourceTypeId = RetailResourceTypeIds.Location
-            };
-            context.Set<SqlzibarResource>().Add(resource);
+            var resourceId = context.CreateResource(chain.ResourceId, request.Name, RetailResourceTypeIds.Location);
 
             var location = new Location
             {

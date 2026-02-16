@@ -89,6 +89,19 @@ public class PagedSpecificationBuilder<T> where T : class
     }
 
     /// <summary>
+    /// Adds a case-insensitive search filter across one or more string properties (OR combined).
+    /// No-op if search is null or whitespace.
+    /// </summary>
+    public PagedSpecificationBuilder<T> Search(
+        string? search, params Expression<Func<T, string?>>[] properties)
+    {
+        var filter = SearchExpressionBuilder.Build(search, properties);
+        if (filter != null)
+            _filters.Add(filter!);
+        return this;
+    }
+
+    /// <summary>
     /// Hook to configure the query before filtering/sorting (e.g., .Include() calls).
     /// </summary>
     public PagedSpecificationBuilder<T> Configure(Func<IQueryable<T>, IQueryable<T>> configurator)
@@ -96,6 +109,14 @@ public class PagedSpecificationBuilder<T> where T : class
         _queryConfigurator = configurator;
         return this;
     }
+
+    /// <summary>
+    /// Builds the specification with the given pagination parameters.
+    /// </summary>
+    public PagedSpecification<T> Build(
+        int pageSize, string? cursor = null, string? sortBy = null, string? sortDir = null)
+        => Build(pageSize, cursor, sortBy,
+            string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Builds the specification with the given pagination parameters.

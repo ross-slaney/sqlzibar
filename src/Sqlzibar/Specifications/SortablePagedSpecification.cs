@@ -91,6 +91,17 @@ public abstract class SortablePagedSpecification<T> : PagedSpecification<T> wher
     }
 
     /// <summary>
+    /// Adds a case-insensitive search filter across one or more string properties (OR combined).
+    /// No-op if search is null or whitespace.
+    /// </summary>
+    protected void Search(string? search, params Expression<Func<T, string?>>[] properties)
+    {
+        var filter = SearchExpressionBuilder.Build(search, properties);
+        if (filter != null)
+            _filters.Add(filter!);
+    }
+
+    /// <summary>
     /// Returns all added filters combined with AND, or a pass-through if none were added.
     /// Override for custom filter logic.
     /// </summary>
@@ -294,5 +305,46 @@ internal static class ExpressionHelper
         var leftBody = ParameterReplacer.Replace(left.Body, left.Parameters[0], param);
         var rightBody = ParameterReplacer.Replace(right.Body, right.Parameters[0], param);
         return Expression.Lambda<Func<T, bool>>(Expression.AndAlso(leftBody, rightBody), param);
+    }
+}
+
+internal static class SearchExpressionBuilder
+{
+    private static readonly System.Reflection.MethodInfo ToLowerMethod =
+        typeof(string).GetMethod(nameof(string.ToLower), Type.EmptyTypes)!;
+
+    private static readonly System.Reflection.MethodInfo ContainsMethod =
+        typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!;
+
+    /// <summary>
+    /// Builds: x => (prop1 != null &amp;&amp; prop1.ToLower().Contains(s))
+    ///           || (prop2 != null &amp;&amp; prop2.ToLower().Contains(s)) || ...
+    /// Returns null if search is null/whitespace or no properties given.
+    /// </summary>
+    public static Expression<Func<T, bool>>? Build<T>(
+        string? search, Expression<Func<T, string?>>[] properties)
+    {
+        if (string.IsNullOrWhiteSpace(search) || properties.Length == 0)
+            return null;
+
+        var searchLower = Expression.Constant(search.ToLower());
+        var param = Expression.Parameter(typeof(T), "x");
+        var nullConst = Expression.Constant(null, typeof(string));
+        Expression? combined = null;
+
+        foreach (var propSelector in properties)
+        {
+            var propBody = ParameterReplacer.Replace(
+                propSelector.Body, propSelector.Parameters[0], param);
+
+            var notNull = Expression.NotEqual(propBody, nullConst);
+            var toLower = Expression.Call(propBody, ToLowerMethod);
+            var contains = Expression.Call(toLower, ContainsMethod, searchLower);
+            var condition = Expression.AndAlso(notNull, contains);
+
+            combined = combined == null ? condition : Expression.OrElse(combined, condition);
+        }
+
+        return Expression.Lambda<Func<T, bool>>(combined!, param);
     }
 }
