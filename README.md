@@ -24,7 +24,7 @@ Sqlzibar provides a complete authorization system that plugs into any EF Core ap
 During development as a project reference:
 
 ```xml
-<ProjectReference Include="path/to/Sqlzibar/src/Sqlzibar/Sqlzibar.csproj" />
+<PackageReference Include="Sqlzibar" Version="1.0.2" />
 ```
 
 ### 2. Add to Your DbContext
@@ -124,12 +124,12 @@ EF Core composes the TVF into your LINQ queries via `CROSS APPLY`, meaning autho
 
 Pick the right pattern for each shape of query:
 
-| Scenario | Pattern | Key API |
-| --- | --- | --- |
-| Paginated list endpoints | Builder or specification class | `PagedSpec.For<T>()` / `SortablePagedSpecification<T>` |
-| Non-paginated queries (jobs, services, one-off fetches) | Raw auth filter + LINQ | `GetAuthorizationFilterAsync<T>()` |
-| Detail endpoints (get by ID) | One-liner with 404/403 handling | `AuthorizedDetailAsync()` |
-| Mutations (create, update, delete) | Point access check + resource creation | `CheckAccessAsync()` + `CreateResource()` |
+| Scenario                                                | Pattern                                | Key API                                                |
+| ------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------ |
+| Paginated list endpoints                                | Builder or specification class         | `PagedSpec.For<T>()` / `SortablePagedSpecification<T>` |
+| Non-paginated queries (jobs, services, one-off fetches) | Raw auth filter + LINQ                 | `GetAuthorizationFilterAsync<T>()`                     |
+| Detail endpoints (get by ID)                            | One-liner with 404/403 handling        | `AuthorizedDetailAsync()`                              |
+| Mutations (create, update, delete)                      | Point access check + resource creation | `CheckAccessAsync()` + `CreateResource()`              |
 
 Every entity that needs authorization implements `IHasResourceId`:
 
@@ -177,6 +177,7 @@ app.MapGet("/api/projects", async (
 ```
 
 This single call:
+
 - Filters to only rows the principal is authorized to see (via TVF)
 - Applies search across the specified fields (case-insensitive OR)
 - Sorts by the requested field with cursor-based pagination
@@ -347,16 +348,16 @@ src/Sqlzibar/
 
 ## Further Reading
 
-| Document | Description |
-| --- | --- |
-| [Configuration & Dashboard](docs/CONFIGURATION.md) | Full options, dashboard setup, schema versioning |
-| [API Reference](docs/API_REFERENCE.md) | Complete interface signatures for all services |
-| [Principal Management](docs/PRINCIPAL_MANAGEMENT.md) | Users, groups, data access, linking entities |
-| [Performance](docs/PERFORMANCE.md) | Benchmark results at 1.2M entities |
-| [Testing](docs/TESTING.md) | Unit and integration test setup |
-| [Example App](docs/EXAMPLE_APP.md) | Retail API example with seeded data and demo scenarios |
-| [Modeling Guide](docs/MODELING_GUIDE.md) | LLM prompt and personal finance app example |
-| [Schema Changes](docs/SCHEMA_CHANGES.md) | For library maintainers adding schema versions |
+| Document                                             | Description                                            |
+| ---------------------------------------------------- | ------------------------------------------------------ |
+| [Configuration & Dashboard](docs/CONFIGURATION.md)   | Full options, dashboard setup, schema versioning       |
+| [API Reference](docs/API_REFERENCE.md)               | Complete interface signatures for all services         |
+| [Principal Management](docs/PRINCIPAL_MANAGEMENT.md) | Users, groups, data access, linking entities           |
+| [Performance](docs/PERFORMANCE.md)                   | Benchmark results at 1.2M entities                     |
+| [Testing](docs/TESTING.md)                           | Unit and integration test setup                        |
+| [Example App](docs/EXAMPLE_APP.md)                   | Retail API example with seeded data and demo scenarios |
+| [Modeling Guide](docs/MODELING_GUIDE.md)             | LLM prompt and personal finance app example            |
+| [Schema Changes](docs/SCHEMA_CHANGES.md)             | For library maintainers adding schema versions         |
 
 ## License
 
