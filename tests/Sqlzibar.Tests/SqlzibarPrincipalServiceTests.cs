@@ -44,7 +44,8 @@ public class SqlzibarPrincipalServiceTests
         _context.Set<SqlzibarPrincipalType>().AddRange(
             new SqlzibarPrincipalType { Id = "user", Name = "User" },
             new SqlzibarPrincipalType { Id = "group", Name = "Group" },
-            new SqlzibarPrincipalType { Id = "service_account", Name = "Service Account" }
+            new SqlzibarPrincipalType { Id = "service_account", Name = "Service Account" },
+            new SqlzibarPrincipalType { Id = "agent", Name = "Agent" }
         );
         _context.SaveChanges();
 
@@ -148,5 +149,66 @@ public class SqlzibarPrincipalServiceTests
         Assert.AreEqual(2, ids.Count);
         Assert.IsTrue(ids.Contains(user.Id));
         Assert.IsTrue(ids.Contains(group.PrincipalId));
+    }
+
+    [TestMethod]
+    public async Task CreateUser_CreatesUserAndPrincipal()
+    {
+        var user = await _service.CreateUserAsync("Test User", "test@example.com");
+        Assert.IsNotNull(user);
+        Assert.IsTrue(user.Id.StartsWith("usr_"));
+        Assert.AreEqual("test@example.com", user.Email);
+        Assert.IsTrue(user.IsActive);
+
+        var principal = await _context.Set<SqlzibarPrincipal>()
+            .FirstOrDefaultAsync(p => p.Id == user.PrincipalId);
+        Assert.IsNotNull(principal);
+        Assert.AreEqual("user", principal.PrincipalTypeId);
+        Assert.AreEqual("Test User", principal.DisplayName);
+    }
+
+    [TestMethod]
+    public async Task CreateAgent_CreatesAgentAndPrincipal()
+    {
+        var agent = await _service.CreateAgentAsync("Test Agent", "background_job", "Nightly sync");
+        Assert.IsNotNull(agent);
+        Assert.IsTrue(agent.Id.StartsWith("agt_"));
+        Assert.AreEqual("background_job", agent.AgentType);
+        Assert.AreEqual("Nightly sync", agent.Description);
+
+        var principal = await _context.Set<SqlzibarPrincipal>()
+            .FirstOrDefaultAsync(p => p.Id == agent.PrincipalId);
+        Assert.IsNotNull(principal);
+        Assert.AreEqual("agent", principal.PrincipalTypeId);
+        Assert.AreEqual("Test Agent", principal.DisplayName);
+    }
+
+    [TestMethod]
+    public async Task CreateServiceAccount_CreatesServiceAccountAndPrincipal()
+    {
+        var sa = await _service.CreateServiceAccountAsync("API Client", "client_123", "hash_abc");
+        Assert.IsNotNull(sa);
+        Assert.IsTrue(sa.Id.StartsWith("sa_"));
+        Assert.AreEqual("client_123", sa.ClientId);
+        Assert.AreEqual("hash_abc", sa.ClientSecretHash);
+
+        var principal = await _context.Set<SqlzibarPrincipal>()
+            .FirstOrDefaultAsync(p => p.Id == sa.PrincipalId);
+        Assert.IsNotNull(principal);
+        Assert.AreEqual("service_account", principal.PrincipalTypeId);
+        Assert.AreEqual("API Client", principal.DisplayName);
+    }
+
+    [TestMethod]
+    public async Task AddToGroup_AgentPrincipal_Succeeds()
+    {
+        var agent = await _service.CreateAgentAsync("Agent", "worker");
+        var group = await _service.CreateGroupAsync("Group");
+
+        await _service.AddToGroupAsync(agent.PrincipalId, group.Id);
+
+        var groups = await _service.GetGroupsForPrincipalAsync(agent.PrincipalId);
+        Assert.AreEqual(1, groups.Count);
+        Assert.AreEqual(group.Id, groups[0].Id);
     }
 }

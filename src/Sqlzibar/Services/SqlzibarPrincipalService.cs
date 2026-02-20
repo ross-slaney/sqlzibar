@@ -68,6 +68,88 @@ public class SqlzibarPrincipalService : ISqlzibarPrincipalService
         return group;
     }
 
+    public async Task<SqlzibarUser> CreateUserAsync(
+        string displayName,
+        string? email = null,
+        bool isActive = true,
+        string? organizationId = null,
+        string? externalRef = null,
+        CancellationToken cancellationToken = default)
+    {
+        var principal = await CreatePrincipalAsync(displayName, "user", organizationId, externalRef, cancellationToken);
+
+        var user = new SqlzibarUser
+        {
+            Id = $"usr_{Guid.NewGuid():N}"[..30],
+            PrincipalId = principal.Id,
+            Email = email,
+            IsActive = isActive,
+        };
+
+        _context.Set<SqlzibarUser>().Add(user);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Created user {UserId} ({DisplayName})", user.Id, displayName);
+
+        return user;
+    }
+
+    public async Task<SqlzibarAgent> CreateAgentAsync(
+        string displayName,
+        string? agentType = null,
+        string? description = null,
+        string? organizationId = null,
+        string? externalRef = null,
+        CancellationToken cancellationToken = default)
+    {
+        var principal = await CreatePrincipalAsync(displayName, "agent", organizationId, externalRef, cancellationToken);
+
+        var agent = new SqlzibarAgent
+        {
+            Id = $"agt_{Guid.NewGuid():N}"[..30],
+            PrincipalId = principal.Id,
+            AgentType = agentType,
+            Description = description,
+        };
+
+        _context.Set<SqlzibarAgent>().Add(agent);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Created agent {AgentId} ({DisplayName})", agent.Id, displayName);
+
+        return agent;
+    }
+
+    public async Task<SqlzibarServiceAccount> CreateServiceAccountAsync(
+        string displayName,
+        string clientId,
+        string clientSecretHash,
+        string? description = null,
+        DateTime? expiresAt = null,
+        string? organizationId = null,
+        string? externalRef = null,
+        CancellationToken cancellationToken = default)
+    {
+        var principal = await CreatePrincipalAsync(displayName, "service_account", organizationId, externalRef, cancellationToken);
+
+        var serviceAccount = new SqlzibarServiceAccount
+        {
+            Id = $"sa_{Guid.NewGuid():N}"[..30],
+            PrincipalId = principal.Id,
+            ClientId = clientId,
+            ClientSecretHash = clientSecretHash,
+            Description = description,
+            ExpiresAt = expiresAt,
+        };
+
+        _context.Set<SqlzibarServiceAccount>().Add(serviceAccount);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Created service account {ServiceAccountId} ({DisplayName})", serviceAccount.Id, displayName);
+
+        return serviceAccount;
+    }
+
     public async Task AddToGroupAsync(string principalId, string userGroupId, CancellationToken cancellationToken = default)
     {
         // Validate principal is NOT a group type (no nested groups allowed)

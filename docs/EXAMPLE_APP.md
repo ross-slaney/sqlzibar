@@ -40,18 +40,20 @@ retail_root (CompanyAdmin)
 
 ## Seeded Principals
 
-| Principal                 | Type  | Direct Grant                  | Scope                                 |
-| ------------------------- | ----- | ----------------------------- | ------------------------------------- |
-| Company Admin             | user  | CompanyAdmin @ retail_root    | Everything                            |
-| Walmart Chain Manager     | user  | ChainManager @ Walmart        | Walmart + all descendants             |
-| Target Chain Manager      | user  | ChainManager @ Target         | Target + all descendants              |
-| Store 001 Manager         | user  | StoreManager @ Store 001      | Store 001 + its inventory             |
-| Store 002 Manager         | user  | StoreManager @ Store 002      | Store 002 + its inventory             |
-| Store 001 Clerk           | user  | StoreClerk @ Store 001        | Store 001 + its inventory (view only) |
-| No Grants User            | user  | _(none)_                      | Nothing                               |
-| Walmart Regional Managers | group | ChainManager @ Walmart        | Walmart + all descendants             |
-| Alice (Regional)          | user  | _(none — inherits via group)_ | Walmart + all descendants             |
-| Bob (Regional)            | user  | _(none — inherits via group)_ | Walmart + all descendants             |
+| Principal                 | Type            | Direct Grant                  | Scope                                 |
+| ------------------------- | --------------- | ----------------------------- | ------------------------------------- |
+| Company Admin             | user            | CompanyAdmin @ retail_root    | Everything                            |
+| Walmart Chain Manager     | user            | ChainManager @ Walmart        | Walmart + all descendants             |
+| Target Chain Manager      | user            | ChainManager @ Target         | Target + all descendants              |
+| Store 001 Manager         | user            | StoreManager @ Store 001      | Store 001 + its inventory             |
+| Store 002 Manager         | user            | StoreManager @ Store 002      | Store 002 + its inventory             |
+| Store 001 Clerk           | user            | StoreClerk @ Store 001        | Store 001 + its inventory (view only) |
+| No Grants User            | user            | _(none)_                      | Nothing                               |
+| Walmart Regional Managers | group           | ChainManager @ Walmart        | Walmart + all descendants             |
+| Alice (Regional)          | user            | _(none — inherits via group)_ | Walmart + all descendants             |
+| Bob (Regional)            | user            | _(none — inherits via group)_ | Walmart + all descendants             |
+| Inventory Sync Agent      | agent           | StoreManager @ Walmart        | Walmart stores                        |
+| API Integration           | service_account | StoreClerk @ retail_root      | Read-only everywhere                  |
 
 ## Access Tester Demo Scenarios
 
@@ -116,3 +118,23 @@ Open the dashboard at `/sqlzibar/` and navigate to **Access Tester**. These scen
 | Resource   | Walmart        |
 
 **Expected: ACCESS DENIED.** This user has no direct grants and no group memberships. The trace shows only one principal was checked (the user themselves), with no grants found at any level.
+
+### 7. Agent Access — Agent has direct grant
+
+| Field      | Value                |
+| ---------- | -------------------- |
+| Principal  | Inventory Sync Agent |
+| Permission | INVENTORY_EDIT       |
+| Resource   | Store 001            |
+
+**Expected: ACCESS GRANTED.** The agent has StoreManager grant on Walmart chain, which cascades to Store 001. The agent is also a member of Walmart Regional Managers group (inherits ChainManager).
+
+### 8. Service Account Access — Service account with limited permissions
+
+| Field      | Value           |
+| ---------- | --------------- |
+| Principal  | API Integration |
+| Permission | INVENTORY_EDIT  |
+| Resource   | Laptop          |
+
+**Expected: ACCESS DENIED.** The service account has StoreClerk role (view-only) at retail_root, which doesn't include INVENTORY_EDIT.

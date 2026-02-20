@@ -155,6 +155,10 @@ public class SqlzibarDashboardMiddleware
         {
             "resources/tree" => await GetResourceTreeAsync(dbContext, context),
             "principals" => await GetPrincipalsAsync(dbContext, context),
+            "users" => await GetUsersAsync(dbContext, context),
+            "agents" => await GetAgentsAsync(dbContext, context),
+            "service-accounts" => await GetServiceAccountsAsync(dbContext, context),
+            "user-groups" => await GetUserGroupsAsync(dbContext, context),
             "grants" => await GetGrantsAsync(dbContext, context),
             "roles" => await GetRolesAsync(dbContext, context),
             "permissions" => await GetPermissionsAsync(dbContext, context),
@@ -162,6 +166,10 @@ public class SqlzibarDashboardMiddleware
             {
                 Resources = await dbContext.Set<SqlzibarResource>().CountAsync(),
                 Principals = await dbContext.Set<SqlzibarPrincipal>().CountAsync(),
+                Users = await dbContext.Set<SqlzibarUser>().CountAsync(),
+                Agents = await dbContext.Set<SqlzibarAgent>().CountAsync(),
+                ServiceAccounts = await dbContext.Set<SqlzibarServiceAccount>().CountAsync(),
+                UserGroups = await dbContext.Set<SqlzibarUserGroup>().CountAsync(),
                 Grants = await dbContext.Set<SqlzibarGrant>().CountAsync(),
                 Roles = await dbContext.Set<SqlzibarRole>().CountAsync(),
                 Permissions = await dbContext.Set<SqlzibarPermission>().CountAsync(),
@@ -406,6 +414,177 @@ public class SqlzibarDashboardMiddleware
 
         var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
         return new { Data = data, Page = page, PageSize = pageSize, TotalCount = totalCount, TotalPages = totalPages };
+    }
+
+    private static async Task<object> GetUsersAsync(ISqlzibarDbContext dbContext, HttpContext context)
+    {
+        var (page, pageSize) = GetPaginationParams(context);
+        var search = context.Request.Query["search"].FirstOrDefault();
+
+        var query = dbContext.Set<SqlzibarUser>()
+            .Include(u => u.Principal)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(search))
+            query = query.Where(u =>
+                (u.Principal != null && (u.Principal.DisplayName.Contains(search) || u.Principal.Id.Contains(search))) ||
+                (u.Email != null && u.Email.Contains(search)));
+
+        var totalCount = await query.CountAsync();
+        var data = await query
+            .OrderBy(u => u.Principal != null ? u.Principal.DisplayName : u.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(u => new
+            {
+                u.Id,
+                u.PrincipalId,
+                DisplayName = u.Principal != null ? u.Principal.DisplayName : u.Id,
+                u.Email,
+                u.IsActive,
+                u.LastLoginAt,
+                u.CreatedAt
+            })
+            .ToListAsync();
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        return new { Data = data, Page = page, PageSize = pageSize, TotalCount = totalCount, TotalPages = totalPages };
+    }
+
+    private static async Task<object> GetAgentsAsync(ISqlzibarDbContext dbContext, HttpContext context)
+    {
+        var (page, pageSize) = GetPaginationParams(context);
+        var search = context.Request.Query["search"].FirstOrDefault();
+
+        var query = dbContext.Set<SqlzibarAgent>()
+            .Include(a => a.Principal)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(search))
+            query = query.Where(a =>
+                (a.Principal != null && (a.Principal.DisplayName.Contains(search) || a.Principal.Id.Contains(search))) ||
+                (a.AgentType != null && a.AgentType.Contains(search)) ||
+                (a.Description != null && a.Description.Contains(search)));
+
+        var totalCount = await query.CountAsync();
+        var data = await query
+            .OrderBy(a => a.Principal != null ? a.Principal.DisplayName : a.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(a => new
+            {
+                a.Id,
+                a.PrincipalId,
+                DisplayName = a.Principal != null ? a.Principal.DisplayName : a.Id,
+                a.AgentType,
+                a.Description,
+                a.LastRunAt,
+                a.CreatedAt
+            })
+            .ToListAsync();
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        return new { Data = data, Page = page, PageSize = pageSize, TotalCount = totalCount, TotalPages = totalPages };
+    }
+
+    private static async Task<object> GetServiceAccountsAsync(ISqlzibarDbContext dbContext, HttpContext context)
+    {
+        var (page, pageSize) = GetPaginationParams(context);
+        var search = context.Request.Query["search"].FirstOrDefault();
+
+        var query = dbContext.Set<SqlzibarServiceAccount>()
+            .Include(s => s.Principal)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(search))
+            query = query.Where(s =>
+                (s.Principal != null && (s.Principal.DisplayName.Contains(search) || s.Principal.Id.Contains(search))) ||
+                s.ClientId.Contains(search) ||
+                (s.Description != null && s.Description.Contains(search)));
+
+        var totalCount = await query.CountAsync();
+        var data = await query
+            .OrderBy(s => s.Principal != null ? s.Principal.DisplayName : s.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(s => new
+            {
+                s.Id,
+                s.PrincipalId,
+                DisplayName = s.Principal != null ? s.Principal.DisplayName : s.Id,
+                s.ClientId,
+                s.Description,
+                s.LastUsedAt,
+                s.ExpiresAt,
+                s.CreatedAt
+            })
+            .ToListAsync();
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        return new { Data = data, Page = page, PageSize = pageSize, TotalCount = totalCount, TotalPages = totalPages };
+    }
+
+    private static async Task<object> GetUserGroupsAsync(ISqlzibarDbContext dbContext, HttpContext context)
+    {
+        var (page, pageSize) = GetPaginationParams(context);
+        var search = context.Request.Query["search"].FirstOrDefault();
+
+        var query = dbContext.Set<SqlzibarUserGroup>()
+            .Include(g => g.Principal)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(search))
+            query = query.Where(g =>
+                g.Name.Contains(search) ||
+                (g.Principal != null && g.Principal.DisplayName.Contains(search)) ||
+                (g.Description != null && g.Description.Contains(search)));
+
+        var totalCount = await query.CountAsync();
+        var data = await query
+            .OrderBy(g => g.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(g => new
+            {
+                g.Id,
+                g.PrincipalId,
+                g.Name,
+                g.Description,
+                g.GroupType,
+                g.CreatedAt
+            })
+            .ToListAsync();
+
+        // Fetch member counts in a single query to avoid N+1 from correlated Count in projection
+        var groupIds = data.Select(x => x.Id).ToList();
+        Dictionary<string, int> memberCountLookup;
+        if (groupIds.Count > 0)
+        {
+            var memberCounts = await dbContext.Set<SqlzibarUserGroupMembership>()
+                .Where(m => groupIds.Contains(m.UserGroupId))
+                .GroupBy(m => m.UserGroupId)
+                .Select(g => new { UserGroupId = g.Key, Count = g.Count() })
+                .ToListAsync();
+            memberCountLookup = memberCounts.ToDictionary(x => x.UserGroupId, x => x.Count);
+        }
+        else
+        {
+            memberCountLookup = new Dictionary<string, int>();
+        }
+
+        var dataWithCounts = data.Select(g => new
+        {
+            g.Id,
+            g.PrincipalId,
+            g.Name,
+            g.Description,
+            g.GroupType,
+            MemberCount = memberCountLookup.GetValueOrDefault(g.Id, 0),
+            g.CreatedAt
+        }).ToList();
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        return new { Data = dataWithCounts, Page = page, PageSize = pageSize, TotalCount = totalCount, TotalPages = totalPages };
     }
 
     private static async Task<object> GetGrantsAsync(ISqlzibarDbContext dbContext, HttpContext context)

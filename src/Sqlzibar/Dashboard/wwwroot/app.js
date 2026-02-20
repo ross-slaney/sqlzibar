@@ -30,6 +30,10 @@
         switch(view) {
             case 'resources': return loadResources();
             case 'principals': return loadPrincipals();
+            case 'users': return loadUsers();
+            case 'agents': return loadAgents();
+            case 'service-accounts': return loadServiceAccounts();
+            case 'user-groups': return loadUserGroups();
             case 'grants': return loadGrants();
             case 'roles': return loadRoles();
             case 'permissions': return loadPermissions();
@@ -291,21 +295,153 @@
         }
     }
 
+    async function loadUsers(page, search) {
+        page = page || 1;
+        search = search || '';
+        const params = `page=${page}&pageSize=25${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+        const result = await api(`users?${params}`);
+
+        content.innerHTML = `<div class="card">
+            ${renderSearchBox('users-search', 'Search users...')}
+            <table><thead><tr><th>Display Name</th><th>Email</th><th>Active</th><th>Created</th></tr></thead>
+            <tbody>${result.data.map(u => `<tr class="principal-row" data-id="${esc(u.principalId)}" style="cursor:pointer">
+                <td>${esc(u.displayName)}</td><td>${esc(u.email || '-')}</td>
+                <td>${u.isActive ? 'Yes' : 'No'}</td>
+                <td>${new Date(u.createdAt).toLocaleDateString()}</td>
+            </tr>`).join('')}</tbody></table>
+            <div id="users-pagination">${renderPagination(result.page, result.totalPages, result.totalCount)}</div>
+        </div>`;
+
+        document.querySelectorAll('.principal-row').forEach(row => {
+            row.addEventListener('click', () => loadPrincipalDetail(row.dataset.id, 'users'));
+        });
+        bindPagination('#users-pagination', (p) => loadUsers(p, search));
+        const searchInput = $('#users-search');
+        if (searchInput) {
+            searchInput.value = search;
+            let debounce;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(debounce);
+                debounce = setTimeout(() => loadUsers(1, e.target.value), 300);
+            });
+        }
+    }
+
+    async function loadAgents(page, search) {
+        page = page || 1;
+        search = search || '';
+        const params = `page=${page}&pageSize=25${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+        const result = await api(`agents?${params}`);
+
+        content.innerHTML = `<div class="card">
+            ${renderSearchBox('agents-search', 'Search agents...')}
+            <table><thead><tr><th>Display Name</th><th>Type</th><th>Description</th><th>Created</th></tr></thead>
+            <tbody>${result.data.map(a => `<tr class="principal-row" data-id="${esc(a.principalId)}" style="cursor:pointer">
+                <td>${esc(a.displayName)}</td><td>${esc(a.agentType || '-')}</td>
+                <td>${esc((a.description || '').slice(0, 50))}${(a.description || '').length > 50 ? '...' : ''}</td>
+                <td>${new Date(a.createdAt).toLocaleDateString()}</td>
+            </tr>`).join('')}</tbody></table>
+            <div id="agents-pagination">${renderPagination(result.page, result.totalPages, result.totalCount)}</div>
+        </div>`;
+
+        document.querySelectorAll('.principal-row').forEach(row => {
+            row.addEventListener('click', () => loadPrincipalDetail(row.dataset.id, 'agents'));
+        });
+        bindPagination('#agents-pagination', (p) => loadAgents(p, search));
+        const searchInput = $('#agents-search');
+        if (searchInput) {
+            searchInput.value = search;
+            let debounce;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(debounce);
+                debounce = setTimeout(() => loadAgents(1, e.target.value), 300);
+            });
+        }
+    }
+
+    async function loadServiceAccounts(page, search) {
+        page = page || 1;
+        search = search || '';
+        const params = `page=${page}&pageSize=25${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+        const result = await api(`service-accounts?${params}`);
+
+        content.innerHTML = `<div class="card">
+            ${renderSearchBox('sa-search', 'Search service accounts...')}
+            <table><thead><tr><th>Display Name</th><th>Client ID</th><th>Description</th><th>Created</th></tr></thead>
+            <tbody>${result.data.map(s => `<tr class="principal-row" data-id="${esc(s.principalId)}" style="cursor:pointer">
+                <td>${esc(s.displayName)}</td><td><code>${esc(s.clientId)}</code></td>
+                <td>${esc((s.description || '').slice(0, 40))}${(s.description || '').length > 40 ? '...' : ''}</td>
+                <td>${new Date(s.createdAt).toLocaleDateString()}</td>
+            </tr>`).join('')}</tbody></table>
+            <div id="sa-pagination">${renderPagination(result.page, result.totalPages, result.totalCount)}</div>
+        </div>`;
+
+        document.querySelectorAll('.principal-row').forEach(row => {
+            row.addEventListener('click', () => loadPrincipalDetail(row.dataset.id, 'service-accounts'));
+        });
+        bindPagination('#sa-pagination', (p) => loadServiceAccounts(p, search));
+        const searchInput = $('#sa-search');
+        if (searchInput) {
+            searchInput.value = search;
+            let debounce;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(debounce);
+                debounce = setTimeout(() => loadServiceAccounts(1, e.target.value), 300);
+            });
+        }
+    }
+
+    async function loadUserGroups(page, search) {
+        page = page || 1;
+        search = search || '';
+        const params = `page=${page}&pageSize=25${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+        const result = await api(`user-groups?${params}`);
+
+        content.innerHTML = `<div class="card">
+            ${renderSearchBox('groups-search', 'Search groups...')}
+            <table><thead><tr><th>Name</th><th>Type</th><th>Members</th><th>Created</th></tr></thead>
+            <tbody>${result.data.map(g => `<tr class="principal-row" data-id="${esc(g.principalId)}" style="cursor:pointer">
+                <td>${esc(g.name)}</td><td>${esc(g.groupType || '-')}</td>
+                <td><span class="badge badge-gray">${g.memberCount}</span></td>
+                <td>${new Date(g.createdAt).toLocaleDateString()}</td>
+            </tr>`).join('')}</tbody></table>
+            <div id="groups-pagination">${renderPagination(result.page, result.totalPages, result.totalCount)}</div>
+        </div>`;
+
+        document.querySelectorAll('.principal-row').forEach(row => {
+            row.addEventListener('click', () => loadPrincipalDetail(row.dataset.id, 'user-groups'));
+        });
+        bindPagination('#groups-pagination', (p) => loadUserGroups(p, search));
+        const searchInput = $('#groups-search');
+        if (searchInput) {
+            searchInput.value = search;
+            let debounce;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(debounce);
+                debounce = setTimeout(() => loadUserGroups(1, e.target.value), 300);
+            });
+        }
+    }
+
     // --- Principal Detail ---
 
-    async function loadPrincipalDetail(principalId) {
+    async function loadPrincipalDetail(principalId, backView) {
+        backView = backView || 'principals';
         content.innerHTML = '<div class="loading">Loading...</div>';
         const [detail, grantsResult] = await Promise.all([
             api(`principals/${encodeURIComponent(principalId)}`),
             api(`principals/${encodeURIComponent(principalId)}/grants?page=1&pageSize=25`)
         ]);
-        renderPrincipalDetail(detail, grantsResult);
+        renderPrincipalDetail(detail, grantsResult, backView);
     }
 
-    function renderPrincipalDetail(detail, grantsResult) {
+    function renderPrincipalDetail(detail, grantsResult, backView) {
+        backView = backView || 'principals';
         const p = detail.principal;
+        const backLabels = { 'users': 'Users', 'agents': 'Agents', 'service-accounts': 'Service Accounts', 'user-groups': 'User Groups', 'principals': 'Principals' };
+        const backLabel = backLabels[backView] || 'Principals';
         let html = `<div class="detail-header">
-            <button class="detail-back" id="back-to-principals">&larr; Back to Principals</button>
+            <button class="detail-back" id="back-to-principals" data-back-view="${esc(backView)}">&larr; Back to ${backLabel}</button>
             <h2>${esc(p.displayName)}</h2>
             <span class="badge badge-green">${esc(p.principalType)}</span>
         </div>`;
@@ -353,7 +489,7 @@
         </div>`;
 
         content.innerHTML = html;
-        bindPrincipalDetailEvents(p.id);
+        bindPrincipalDetailEvents(p.id, backView);
     }
 
     function renderPrincipalGrantsTable(result) {
@@ -377,8 +513,9 @@
         return html;
     }
 
-    function bindPrincipalDetailEvents(principalId) {
-        $('#back-to-principals').addEventListener('click', () => loadPrincipals());
+    function bindPrincipalDetailEvents(principalId, backView) {
+        backView = backView || 'principals';
+        $('#back-to-principals').addEventListener('click', () => loadView(backView));
         // Paginate grants
         bindPagination('#principal-grants-pagination', async (page) => {
             const grantsResult = await api(`principals/${encodeURIComponent(principalId)}/grants?page=${page}&pageSize=25`);
@@ -388,16 +525,16 @@
                 const r = await api(`principals/${encodeURIComponent(principalId)}/grants?page=${p}&pageSize=25`);
                 const card = document.querySelector('#principal-grants-pagination').closest('.card');
                 card.innerHTML = '<h3 style="margin-bottom:1rem">Role Grants</h3>' + renderPrincipalGrantsTable(r);
-                bindPrincipalDetailEvents(principalId);
+                bindPrincipalDetailEvents(principalId, backView);
             });
         });
         // Click group badges to navigate to that group's detail
         document.querySelectorAll('[data-group-principal]').forEach(el => {
-            el.addEventListener('click', () => loadPrincipalDetail(el.dataset.groupPrincipal));
+            el.addEventListener('click', () => loadPrincipalDetail(el.dataset.groupPrincipal, backView));
         });
         // Click member rows to navigate to that member's detail
         document.querySelectorAll('.member-row').forEach(row => {
-            row.addEventListener('click', () => loadPrincipalDetail(row.dataset.id));
+            row.addEventListener('click', () => loadPrincipalDetail(row.dataset.id, backView));
         });
     }
 
