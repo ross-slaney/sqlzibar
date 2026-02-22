@@ -133,6 +133,28 @@ public static class SqlzibarModelConfiguration
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        // User
+        modelBuilder.Entity<SqlzibarUser>(entity =>
+        {
+            entity.ToTable(tables.Users, schema, t => t.ExcludeFromMigrations());
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.Principal)
+                .WithOne(p => p.User)
+                .HasForeignKey<SqlzibarUser>(e => e.PrincipalId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Agent
+        modelBuilder.Entity<SqlzibarAgent>(entity =>
+        {
+            entity.ToTable(tables.Agents, schema, t => t.ExcludeFromMigrations());
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.Principal)
+                .WithOne(p => p.Agent)
+                .HasForeignKey<SqlzibarAgent>(e => e.PrincipalId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         // ServiceAccount
         modelBuilder.Entity<SqlzibarServiceAccount>(entity =>
         {

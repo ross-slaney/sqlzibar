@@ -10,7 +10,7 @@ namespace Sqlzibar.Services;
 
 public class SqlzibarSchemaInitializer
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
 
     private readonly ISqlzibarDbContext _context;
     private readonly SqlzibarOptions _options;
@@ -68,15 +68,16 @@ END";
         {
             _logger.LogInformation("Fresh install detected. Running initial schema creation (v{Version})...", CurrentSchemaVersion);
             await RunScriptAsync("Sqlzibar.Schema.001_Initial.sql", cancellationToken);
+            if (CurrentSchemaVersion >= 2)
+                await RunScriptAsync("Sqlzibar.Schema.002_UsersAndAgents.sql", cancellationToken);
             _logger.LogInformation("Schema v{Version} installed successfully.", CurrentSchemaVersion);
         }
         else if (currentVersion < CurrentSchemaVersion)
         {
             _logger.LogInformation("Schema upgrade needed: v{Current} -> v{Target}", currentVersion, CurrentSchemaVersion);
 
-            // Future upgrade scripts would be executed here in order:
-            // if (currentVersion < 2) await RunScriptAsync("Sqlzibar.Schema.002_UpgradeName.sql", ct);
-            // if (currentVersion < 3) await RunScriptAsync("Sqlzibar.Schema.003_UpgradeName.sql", ct);
+            if (currentVersion < 2)
+                await RunScriptAsync("Sqlzibar.Schema.002_UsersAndAgents.sql", cancellationToken);
 
             _logger.LogInformation("Schema upgraded to v{Version}.", CurrentSchemaVersion);
         }
@@ -127,6 +128,8 @@ END";
             .Replace("{Roles}", tables.Roles)
             .Replace("{Permissions}", tables.Permissions)
             .Replace("{RolePermissions}", tables.RolePermissions)
-            .Replace("{ServiceAccounts}", tables.ServiceAccounts);
+            .Replace("{ServiceAccounts}", tables.ServiceAccounts)
+            .Replace("{Users}", tables.Users)
+            .Replace("{Agents}", tables.Agents);
     }
 }

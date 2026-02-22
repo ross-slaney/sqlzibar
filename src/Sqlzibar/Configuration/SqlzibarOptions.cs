@@ -57,4 +57,6 @@ public class SqlzibarTableNames
     public string Permissions { get; set; } = "SqlzibarPermissions";
     public string RolePermissions { get; set; } = "SqlzibarRolePermissions";
     public string ServiceAccounts { get; set; } = "SqlzibarServiceAccounts";
+    public string Users { get; set; } = "SqlzibarUsers";
+    public string Agents { get; set; } = "SqlzibarAgents";
 }

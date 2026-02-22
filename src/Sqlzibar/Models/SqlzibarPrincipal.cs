@@ -15,6 +15,8 @@ public class SqlzibarPrincipal
 
     // Navigation
     public SqlzibarPrincipalType? PrincipalType { get; set; }
+    public SqlzibarUser? User { get; set; }
+    public SqlzibarAgent? Agent { get; set; }
     public SqlzibarUserGroup? UserGroup { get; set; }
     public SqlzibarServiceAccount? ServiceAccount { get; set; }
     public ICollection<SqlzibarGrant> Grants { get; set; } = new List<SqlzibarGrant>();

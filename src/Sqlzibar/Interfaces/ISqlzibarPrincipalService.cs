@@ -18,6 +18,41 @@ public interface ISqlzibarPrincipalService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Create a new user with its associated principal.
+    /// </summary>
+    Task<SqlzibarUser> CreateUserAsync(
+        string displayName,
+        string? email = null,
+        bool isActive = true,
+        string? organizationId = null,
+        string? externalRef = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Create a new agent with its associated principal.
+    /// </summary>
+    Task<SqlzibarAgent> CreateAgentAsync(
+        string displayName,
+        string? agentType = null,
+        string? description = null,
+        string? organizationId = null,
+        string? externalRef = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Create a new service account with its associated principal.
+    /// </summary>
+    Task<SqlzibarServiceAccount> CreateServiceAccountAsync(
+        string displayName,
+        string clientId,
+        string clientSecretHash,
+        string? description = null,
+        DateTime? expiresAt = null,
+        string? organizationId = null,
+        string? externalRef = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Create a new user group with its associated principal.
     /// </summary>
     Task<SqlzibarUserGroup> CreateGroupAsync(
@@ -28,7 +63,7 @@ public interface ISqlzibarPrincipalService
 
     /// <summary>
     /// Add a principal to a group.
-    /// Only principals of type 'user' or 'service_account' can be added — groups cannot contain other groups.
+    /// Only principals of type 'user', 'agent', or 'service_account' can be added — groups cannot contain other groups.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if the principal is a group type.</exception>
     Task AddToGroupAsync(string principalId, string userGroupId, CancellationToken cancellationToken = default);

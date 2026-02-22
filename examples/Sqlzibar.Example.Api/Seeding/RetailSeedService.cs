@@ -28,6 +28,10 @@ public class RetailSeedService
     public const string RegionalUserAlicePrincipalId = "prin_regional_alice";
     public const string RegionalUserBobPrincipalId = "prin_regional_bob";
 
+    // Agent and service account principal IDs (set during seeding via CreateAgentAsync/CreateServiceAccountAsync)
+    public static string? InventorySyncAgentPrincipalId { get; private set; }
+    public static string? ApiIntegrationServiceAccountPrincipalId { get; private set; }
+
     // Well-known resource IDs
     public const string WalmartChainResourceId = "res_chain_walmart";
     public const string TargetChainResourceId = "res_chain_target";
@@ -114,6 +118,38 @@ public class RetailSeedService
             new SqlzibarUserGroupMembership { PrincipalId = RegionalUserAlicePrincipalId, UserGroupId = WalmartRegionalGroupId },
             new SqlzibarUserGroupMembership { PrincipalId = RegionalUserBobPrincipalId, UserGroupId = WalmartRegionalGroupId }
         );
+        await _context.SaveChangesAsync(ct);
+
+        // 2c. Add SqlzibarUser records for user principals (for Users dashboard)
+        _context.Set<SqlzibarUser>().AddRange(
+            new SqlzibarUser { Id = "usr_company_admin", PrincipalId = CompanyAdminPrincipalId, Email = "admin@retail.example.com", IsActive = true },
+            new SqlzibarUser { Id = "usr_chain_mgr_walmart", PrincipalId = ChainManagerWalmartPrincipalId, Email = "walmart.manager@retail.example.com", IsActive = true },
+            new SqlzibarUser { Id = "usr_chain_mgr_target", PrincipalId = ChainManagerTargetPrincipalId, Email = "target.manager@retail.example.com", IsActive = true },
+            new SqlzibarUser { Id = "usr_store_mgr_001", PrincipalId = StoreManager001PrincipalId, Email = "store001.mgr@retail.example.com", IsActive = true },
+            new SqlzibarUser { Id = "usr_store_mgr_002", PrincipalId = StoreManager002PrincipalId, Email = "store002.mgr@retail.example.com", IsActive = true },
+            new SqlzibarUser { Id = "usr_store_clerk_001", PrincipalId = StoreClerk001PrincipalId, Email = "store001.clerk@retail.example.com", IsActive = true },
+            new SqlzibarUser { Id = "usr_no_grants", PrincipalId = NoGrantsPrincipalId, IsActive = true },
+            new SqlzibarUser { Id = "usr_regional_alice", PrincipalId = RegionalUserAlicePrincipalId, Email = "alice@retail.example.com", IsActive = true },
+            new SqlzibarUser { Id = "usr_regional_bob", PrincipalId = RegionalUserBobPrincipalId, Email = "bob@retail.example.com", IsActive = true }
+        );
+        await _context.SaveChangesAsync(ct);
+
+        // 2d. Create agent and service account via service (demonstrates all 4 principal types)
+        var inventorySyncAgent = await _principalService.CreateAgentAsync(
+            "Inventory Sync Agent",
+            agentType: "background_job",
+            description: "Nightly inventory synchronization");
+        InventorySyncAgentPrincipalId = inventorySyncAgent.PrincipalId;
+
+        var apiServiceAccount = await _principalService.CreateServiceAccountAsync(
+            "API Integration",
+            clientId: "retail_api_client",
+            clientSecretHash: "hashed_secret_placeholder",
+            description: "External API integration service");
+        ApiIntegrationServiceAccountPrincipalId = apiServiceAccount.PrincipalId;
+
+        await _principalService.AddToGroupAsync(inventorySyncAgent.PrincipalId, WalmartRegionalGroupId);
+
         await _context.SaveChangesAsync(ct);
 
         // 3. Create resources in the hierarchy
@@ -252,7 +288,11 @@ public class RetailSeedService
             new SqlzibarGrant { Id = "grant_store_mgr_002", PrincipalId = StoreManager002PrincipalId, ResourceId = Store002ResourceId, RoleId = storeManagerRole.Id },
             new SqlzibarGrant { Id = "grant_store_clerk_001", PrincipalId = StoreClerk001PrincipalId, ResourceId = Store001ResourceId, RoleId = storeClerkRole.Id },
             // Group grant: Walmart Regional Managers group gets ChainManager on Walmart chain
-            new SqlzibarGrant { Id = "grant_walmart_regional_group", PrincipalId = WalmartRegionalGroupPrincipalId, ResourceId = WalmartChainResourceId, RoleId = chainManagerRole.Id }
+            new SqlzibarGrant { Id = "grant_walmart_regional_group", PrincipalId = WalmartRegionalGroupPrincipalId, ResourceId = WalmartChainResourceId, RoleId = chainManagerRole.Id },
+            // Agent grant: Inventory Sync Agent gets StoreManager on Walmart (also inherits via group)
+            new SqlzibarGrant { Id = "grant_inventory_sync", PrincipalId = InventorySyncAgentPrincipalId!, ResourceId = WalmartChainResourceId, RoleId = storeManagerRole.Id },
+            // Service account grant: API Integration gets read-only (StoreClerk) at root
+            new SqlzibarGrant { Id = "grant_api_integration", PrincipalId = ApiIntegrationServiceAccountPrincipalId!, ResourceId = "retail_root", RoleId = storeClerkRole.Id }
             // NoGrantsPrincipalId, RegionalUserAlice, RegionalUserBob have no direct grants
             // — Alice and Bob inherit access via their group membership
         );

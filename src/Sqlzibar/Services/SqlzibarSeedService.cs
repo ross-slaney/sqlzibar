@@ -31,6 +31,7 @@ public class SqlzibarSeedService
         await SeedIfNotExistsAsync<SqlzibarPrincipalType>("user", new SqlzibarPrincipalType { Id = "user", Name = "User", Description = "A human user" }, cancellationToken);
         await SeedIfNotExistsAsync<SqlzibarPrincipalType>("group", new SqlzibarPrincipalType { Id = "group", Name = "Group", Description = "A user group" }, cancellationToken);
         await SeedIfNotExistsAsync<SqlzibarPrincipalType>("service_account", new SqlzibarPrincipalType { Id = "service_account", Name = "Service Account", Description = "An automated service account" }, cancellationToken);
+        await SeedIfNotExistsAsync<SqlzibarPrincipalType>("agent", new SqlzibarPrincipalType { Id = "agent", Name = "Agent", Description = "An automated agent (job, worker, AI)" }, cancellationToken);
 
         // Seed root resource type
         await SeedIfNotExistsAsync<SqlzibarResourceType>("root", new SqlzibarResourceType { Id = "root", Name = "Root", Description = "The root resource type" }, cancellationToken);

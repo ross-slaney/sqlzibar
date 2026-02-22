@@ -31,6 +31,18 @@ public static class TestDataSeeder
     public const string TestGroupId = "grp_test_group";
     public const string TestGroupPrincipalId = "prin_test_group";
 
+    // Test user (extension table)
+    public const string TestUserPrincipalId = "prin_test_user";
+    public const string TestUserId = "usr_test_user";
+
+    // Test agent
+    public const string TestAgentPrincipalId = "prin_test_agent";
+    public const string TestAgentId = "agt_test_agent";
+
+    // Test service account
+    public const string TestServiceAccountPrincipalId = "prin_test_sa";
+    public const string TestServiceAccountId = "sa_test_sa";
+
     public static async Task SeedAsync(TestSqlzibarDbContext context)
     {
         // Resource types
@@ -84,8 +96,38 @@ public static class TestDataSeeder
             new SqlzibarPrincipal { Id = AgencyMemberPrincipalId, PrincipalTypeId = "user", DisplayName = "Agency Member" },
             new SqlzibarPrincipal { Id = GroupMemberPrincipalId, PrincipalTypeId = "user", DisplayName = "Group Member" },
             new SqlzibarPrincipal { Id = UnauthorizedPrincipalId, PrincipalTypeId = "user", DisplayName = "Unauthorized User" },
-            new SqlzibarPrincipal { Id = TestGroupPrincipalId, PrincipalTypeId = "group", DisplayName = "Test Group" }
+            new SqlzibarPrincipal { Id = TestGroupPrincipalId, PrincipalTypeId = "group", DisplayName = "Test Group" },
+            new SqlzibarPrincipal { Id = TestUserPrincipalId, PrincipalTypeId = "user", DisplayName = "Test User" },
+            new SqlzibarPrincipal { Id = TestAgentPrincipalId, PrincipalTypeId = "agent", DisplayName = "Test Agent" },
+            new SqlzibarPrincipal { Id = TestServiceAccountPrincipalId, PrincipalTypeId = "service_account", DisplayName = "Test Service Account" }
         );
+
+        // User extension
+        context.Set<SqlzibarUser>().Add(new SqlzibarUser
+        {
+            Id = TestUserId,
+            PrincipalId = TestUserPrincipalId,
+            Email = "testuser@example.com",
+            IsActive = true
+        });
+
+        // Agent extension
+        context.Set<SqlzibarAgent>().Add(new SqlzibarAgent
+        {
+            Id = TestAgentId,
+            PrincipalId = TestAgentPrincipalId,
+            AgentType = "background_job",
+            Description = "Test background job agent"
+        });
+
+        // Service account extension
+        context.Set<SqlzibarServiceAccount>().Add(new SqlzibarServiceAccount
+        {
+            Id = TestServiceAccountId,
+            PrincipalId = TestServiceAccountPrincipalId,
+            ClientId = "test_client_id",
+            ClientSecretHash = "test_hash"
+        });
 
         // User group
         context.Set<SqlzibarUserGroup>().Add(
@@ -94,9 +136,10 @@ public static class TestDataSeeder
 
         await context.SaveChangesAsync();
 
-        // Group membership (GroupMember belongs to TestGroup)
-        context.Set<SqlzibarUserGroupMembership>().Add(
-            new SqlzibarUserGroupMembership { PrincipalId = GroupMemberPrincipalId, UserGroupId = TestGroupId }
+        // Group membership (GroupMember belongs to TestGroup, Agent also in TestGroup for inheritance tests)
+        context.Set<SqlzibarUserGroupMembership>().AddRange(
+            new SqlzibarUserGroupMembership { PrincipalId = GroupMemberPrincipalId, UserGroupId = TestGroupId },
+            new SqlzibarUserGroupMembership { PrincipalId = TestAgentPrincipalId, UserGroupId = TestGroupId }
         );
 
         // Grants
