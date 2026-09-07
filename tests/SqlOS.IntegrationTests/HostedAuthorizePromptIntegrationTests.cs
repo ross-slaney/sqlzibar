@@ -334,6 +334,76 @@ public sealed class HostedAuthorizePromptIntegrationTests
     }
 
     [TestMethod]
+    public async Task LogoutAfterRenewal_PredecessorReplay_RequiresLoginAndIssuesNoToken()
+    {
+        await using var fixture = await HostedAuthorizeTokenFixture.CreateAsync("LogoutRenewal");
+        await fixture.SetClientAllowedScopesAsync("openid");
+
+        var started = await fixture.StartAuthorizeAsync("openid");
+        var login = await fixture.SubmitPasswordLoginWithSessionAsync(started);
+        var cookieA = login.AuthPageCookie;
+        using var initialTokens = await fixture.ExchangeAuthorizationCodeAsync(login.Code, started.CodeVerifier);
+        initialTokens.RootElement.GetProperty("access_token").GetString().Should().NotBeNullOrWhiteSpace();
+
+        using var renewed = await fixture.AuthorizeWithSessionAsync("openid", cookieA, prompt: "none");
+        renewed.Response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        var cookieB = HostedAuthorizeTokenFixture.TryExtractCookie(renewed.Response, "sqlos_auth_page=")!;
+        cookieB.Should().NotBeNullOrWhiteSpace();
+        cookieB.Should().NotBe(cookieA);
+
+        using var loggedOut = await fixture.LogoutAsync(cookieB);
+        loggedOut.StatusCode.Should().NotBe(HttpStatusCode.InternalServerError);
+
+        using var replayB = await fixture.AuthorizeWithSessionAsync("openid", cookieB, prompt: "none");
+        var replayBQuery = QueryHelpers.ParseQuery(replayB.Response.Headers.Location!.Query);
+        replayBQuery["error"].ToString().Should().Be("login_required");
+        replayBQuery.ContainsKey("code").Should().BeFalse();
+
+        using var replayA = await fixture.AuthorizeWithSessionAsync("openid", cookieA, prompt: "none");
+        var replayAQuery = QueryHelpers.ParseQuery(replayA.Response.Headers.Location!.Query);
+        replayAQuery["error"].ToString().Should().Be("login_required");
+        replayAQuery.ContainsKey("code").Should().BeFalse();
+
+        using var ordinary = await fixture.AuthorizeWithSessionAsync("openid", cookieA);
+        ordinary.Response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var html = await ordinary.Response.Content.ReadAsStringAsync();
+        html.Should().Contain("__RequestVerificationToken");
+        html.Should().NotContain("name=\"code\"");
+
+        var persisted = await fixture.InspectAuthPageAsync(cookieA, cookieB);
+        persisted.Tokens.Should().HaveCount(2);
+        persisted.Tokens.Should().OnlyContain(token => token != null && token.ConsumedAt != null);
+        persisted.Families.Should().ContainSingle();
+        persisted.Families.Single().RevokedAt.Should().NotBeNull();
+        persisted.Families.Single().RevocationReason.Should().Be(SqlOSAuthPageSessionService.LogoutReason);
+    }
+
+    [TestMethod]
+    public async Task Logout_DoesNotRevokeAnIndependentAuthPageSession()
+    {
+        await using var fixture = await HostedAuthorizeTokenFixture.CreateAsync("LogoutIndependent");
+        await fixture.SetClientAllowedScopesAsync("openid");
+
+        var first = await fixture.StartAuthorizeAsync("openid");
+        var firstLogin = await fixture.SubmitPasswordLoginWithSessionAsync(first);
+        using var firstTokens = await fixture.ExchangeAuthorizationCodeAsync(firstLogin.Code, first.CodeVerifier);
+        firstTokens.RootElement.GetProperty("access_token").GetString().Should().NotBeNullOrWhiteSpace();
+
+        var second = await fixture.StartAuthorizeAsync("openid");
+        var secondLogin = await fixture.SubmitPasswordLoginWithSessionAsync(second);
+        secondLogin.AuthPageCookie.Should().NotBe(firstLogin.AuthPageCookie);
+
+        using var loggedOut = await fixture.LogoutAsync(firstLogin.AuthPageCookie);
+        loggedOut.StatusCode.Should().NotBe(HttpStatusCode.InternalServerError);
+
+        using var independent = await fixture.AuthorizeWithSessionAsync("openid", secondLogin.AuthPageCookie, prompt: "none");
+        independent.Response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        var query = QueryHelpers.ParseQuery(independent.Response.Headers.Location!.Query);
+        query["code"].ToString().Should().NotBeNullOrWhiteSpace();
+        query.ContainsKey("error").Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task ClientSecretPost_FullAuthorizeLoginExchange_SucceedsWithBodySecret()
     {
         const string postClientId = "hosted-post-client";

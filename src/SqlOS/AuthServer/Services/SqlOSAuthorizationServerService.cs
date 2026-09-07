@@ -1784,8 +1784,13 @@ public sealed class SqlOSAuthorizationServerService
         {
             authorizationRequest.ResolvedAuthMethod = authenticationMethod;
             authorizationRequest.ResolvedOrganizationId = organizationId;
+            if (!await _authPageSessionService.CanContinuePresentingSessionAsync(httpContext, cancellationToken))
+            {
+                throw new InvalidOperationException(SqlOSAuthPageSessionService.SessionNoLongerActiveMessage);
+            }
+
             await _context.SaveChangesAsync(cancellationToken);
-            await _authPageSessionService.SignInAsync(httpContext, user, organizationId, authenticationMethod, authenticatedAt, cancellationToken);
+            await SignInForAuthorizationAsync(httpContext, user, organizationId, authenticationMethod, authenticatedAt, cancellationToken);
 
             return QueryHelpers.AddQueryString(
                 $"{_options.BasePath.TrimEnd('/')}/device/approve",
@@ -1793,7 +1798,13 @@ public sealed class SqlOSAuthorizationServerService
                 authorizationRequest.Id);
         }
 
+        if (!await _authPageSessionService.CanContinuePresentingSessionAsync(httpContext, cancellationToken))
+        {
+            throw new InvalidOperationException(SqlOSAuthPageSessionService.SessionNoLongerActiveMessage);
+        }
+
         var rawCode = _cryptoService.GenerateOpaqueToken();
+        var codeHash = _cryptoService.HashToken(rawCode);
         _context.Set<SqlOSAuthorizationCode>().Add(new SqlOSAuthorizationCode
         {
             Id = _cryptoService.GenerateId("acd"),
@@ -1807,7 +1818,7 @@ public sealed class SqlOSAuthorizationServerService
             Resource = authorizationRequest.Resource,
             Nonce = authorizationRequest.Nonce,
             AuthTime = authenticatedAt,
-            CodeHash = _cryptoService.HashToken(rawCode),
+            CodeHash = codeHash,
             CodeChallenge = authorizationRequest.CodeChallenge,
             CodeChallengeMethod = authorizationRequest.CodeChallengeMethod,
             AuthenticationMethod = authenticationMethod,
@@ -1832,7 +1843,18 @@ public sealed class SqlOSAuthorizationServerService
             throw new InvalidOperationException("Authorization request is no longer active.", ex);
         }
 
-        await _authPageSessionService.SignInAsync(httpContext, user, organizationId, authenticationMethod, authenticatedAt, cancellationToken);
+        try
+        {
+            await SignInForAuthorizationAsync(httpContext, user, organizationId, authenticationMethod, authenticatedAt, cancellationToken);
+        }
+        catch (InvalidOperationException ex) when (string.Equals(
+            ex.Message,
+            SqlOSAuthPageSessionService.SessionNoLongerActiveMessage,
+            StringComparison.Ordinal))
+        {
+            await ConsumeIssuedAuthorizationCodeAsync(codeHash, cancellationToken);
+            throw;
+        }
 
         var query = new Dictionary<string, string?>
         {
@@ -1920,6 +1942,41 @@ public sealed class SqlOSAuthorizationServerService
 
     internal static string[] TokenizePrompt(string? prompt)
         => (prompt ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private async Task SignInForAuthorizationAsync(
+        HttpContext httpContext,
+        SqlOSUser user,
+        string? organizationId,
+        string authenticationMethod,
+        DateTime? authenticatedAt,
+        CancellationToken cancellationToken)
+    {
+        await _authPageSessionService.SignInAsync(
+            httpContext,
+            user,
+            organizationId,
+            authenticationMethod,
+            authenticatedAt,
+            continueExistingSession: true,
+            cancellationToken);
+        if (!await _authPageSessionService.CanContinuePresentingSessionAsync(httpContext, cancellationToken))
+        {
+            throw new InvalidOperationException(SqlOSAuthPageSessionService.SessionNoLongerActiveMessage);
+        }
+    }
+
+    private async Task ConsumeIssuedAuthorizationCodeAsync(string codeHash, CancellationToken cancellationToken)
+    {
+        var code = await _context.Set<SqlOSAuthorizationCode>()
+            .FirstOrDefaultAsync(x => x.CodeHash == codeHash && x.ConsumedAt == null, cancellationToken);
+        if (code == null)
+        {
+            return;
+        }
+
+        code.ConsumedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 
     /// <summary>
     /// Resolves the moment the user actually authenticated for the sign-in completing

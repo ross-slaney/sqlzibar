@@ -681,10 +681,32 @@ public sealed class SqlOSTemporaryToken
     public string? UserId { get; set; }
     public string? ClientApplicationId { get; set; }
     public string? OrganizationId { get; set; }
+    public string? AuthPageSessionFamilyId { get; set; }
     public string? PayloadJson { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
     public DateTime? ConsumedAt { get; set; }
+
+    public SqlOSAuthPageSessionFamily? AuthPageSessionFamily { get; set; }
+}
+
+/// <summary>
+/// Durable AuthPage cookie family. Silent renewal mints a new cookie credential
+/// on the same family; logout and lifecycle revocation invalidate every
+/// credential in that family, including superseded predecessors.
+/// </summary>
+public sealed class SqlOSAuthPageSessionFamily
+{
+    public string Id { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public string? OrganizationId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public string? RevocationReason { get; set; }
+
+    public SqlOSUser? User { get; set; }
+    public SqlOSOrganization? Organization { get; set; }
+    public ICollection<SqlOSTemporaryToken> TemporaryTokens { get; set; } = new List<SqlOSTemporaryToken>();
 }
 
 public sealed class SqlOSAuditEvent

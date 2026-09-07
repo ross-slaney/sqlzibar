@@ -88,13 +88,12 @@ public sealed class AuthServiceIntegrationTests
                 .Select(x => x.Id)
                 .SingleAsync();
             organizationId = signup.Tokens!.OrganizationId!;
-            rawCookie = await issuance.Crypto.CreateTemporaryTokenAsync(
-                "auth_page_session",
-                userId,
-                clientApplicationId: null,
-                organizationId: organizationId,
-                payload: new { AuthenticationMethod = "password" },
-                lifetime: TimeSpan.FromMinutes(30));
+            var user = await issuance.Context.Set<SqlOS.AuthServer.Models.SqlOSUser>()
+                .SingleAsync(x => x.Id == userId);
+            var signIn = new DefaultHttpContext();
+            signIn.Request.Scheme = "https";
+            await issuance.AuthPage.SignInAsync(signIn, user, organizationId, "password");
+            rawCookie = signIn.Response.Headers.SetCookie.ToString().Split(';', 2)[0]["sqlos_auth_page=".Length..];
         }
 
         await using (var offboarding = BuildIsolatedContext())

@@ -840,6 +840,7 @@ public sealed class SqlOSConsentTests
             SqlOSConsentService consent,
             SqlOSAdminService admin,
             SqlOSCryptoService crypto,
+            SqlOSAuthPageSessionService authPage,
             DefaultHttpContext http)
         {
             Context = context;
@@ -848,6 +849,7 @@ public sealed class SqlOSConsentTests
             Consent = consent;
             Admin = admin;
             Crypto = crypto;
+            AuthPage = authPage;
             Http = http;
         }
 
@@ -857,6 +859,7 @@ public sealed class SqlOSConsentTests
         public SqlOSConsentService Consent { get; }
         public SqlOSAdminService Admin { get; }
         public SqlOSCryptoService Crypto { get; }
+        public SqlOSAuthPageSessionService AuthPage { get; }
         public DefaultHttpContext Http { get; }
         public string OrganizationId { get; private set; } = null!;
 
@@ -913,7 +916,7 @@ public sealed class SqlOSConsentTests
             await settings.EnsureDefaultMfaSettingsAsync();
             var organization = await admin.CreateOrganizationAsync(new SqlOSCreateOrganizationRequest("Consent Org", null));
 
-            return new Harness(context, authOptions, authorization, consent, admin, crypto, http)
+            return new Harness(context, authOptions, authorization, consent, admin, crypto, authPage, http)
             {
                 OrganizationId = organization.Id
             };
@@ -926,17 +929,15 @@ public sealed class SqlOSConsentTests
         /// </summary>
         public async Task<DefaultHttpContext> CreateSessionHttpContextAsync(SqlOSUser user, DateTime? authenticatedAt = null)
         {
-            var rawCookie = await Crypto.CreateTemporaryTokenAsync(
-                "auth_page_session",
-                user.Id,
-                clientApplicationId: null,
-                organizationId: OrganizationId,
-                payload: new { AuthenticationMethod = "password", AuthenticatedAt = authenticatedAt ?? DateTime.UtcNow },
-                lifetime: TimeSpan.FromMinutes(30));
+            var signIn = new DefaultHttpContext();
+            signIn.Request.Scheme = "https";
+            signIn.Request.Host = new HostString("auth.example.test");
+            await AuthPage.SignInAsync(signIn, user, OrganizationId, "password", authenticatedAt);
+            var pair = signIn.Response.Headers.SetCookie.ToString().Split(';', 2)[0];
             var http = new DefaultHttpContext();
             http.Request.Scheme = "https";
             http.Request.Host = new HostString("auth.example.test");
-            http.Request.Headers.Cookie = $"sqlos_auth_page={rawCookie}";
+            http.Request.Headers.Cookie = pair;
             return http;
         }
 

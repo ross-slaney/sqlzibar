@@ -143,6 +143,20 @@ internal static class SqlOSAuthLifecyclePolicy
 
         var temporaryTokens = await temporaryTokensQuery.ToListAsync(cancellationToken);
 
+        var authPageFamiliesQuery = context.Set<SqlOSAuthPageSessionFamily>()
+            .Where(x => x.RevokedAt == null);
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            authPageFamiliesQuery = authPageFamiliesQuery.Where(x => x.UserId == userId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(organizationId))
+        {
+            authPageFamiliesQuery = authPageFamiliesQuery.Where(x => x.OrganizationId == organizationId);
+        }
+
+        var authPageFamilies = await authPageFamiliesQuery.ToListAsync(cancellationToken);
+
         var authorizationCodesQuery = context.Set<SqlOSAuthorizationCode>()
             .Where(x => x.ConsumedAt == null);
         if (!string.IsNullOrWhiteSpace(userId))
@@ -216,6 +230,12 @@ internal static class SqlOSAuthLifecyclePolicy
         foreach (var temporaryToken in temporaryTokens)
         {
             temporaryToken.ConsumedAt = now;
+        }
+
+        foreach (var family in authPageFamilies)
+        {
+            family.RevokedAt = now;
+            family.RevocationReason = reason;
         }
 
         foreach (var authorizationCode in authorizationCodes)

@@ -5,7 +5,7 @@ order: 9
 section: authserver
 ---
 
-Each login creates an OAuth session (access token plus refresh token) and, for a hosted or headless browser flow, a separate AuthPage session cookie. Clearing the tokens does not end the cookie. See [Refresh and Logout](/docs/authserver/refresh-and-logout).
+Each login creates an OAuth session (access token plus refresh token) and, for a hosted or headless browser flow (including system-browser and device-approval sign-in for mobile, desktop, and CLI clients), a separate AuthPage session cookie. Clearing the tokens does not end the cookie. AuthPage cookies that belong to the same logical session share a revocation lifetime: logout invalidates the current cookie and any superseded predecessor from silent renewal. See [Refresh and Logout](/docs/authserver/refresh-and-logout).
 
 ## Token response
 
@@ -130,7 +130,7 @@ Revoke all sessions for a user:
 await authService.LogoutAllAsync(userId, ct);
 ```
 
-`LogoutAllAsync` invalidates both OAuth sessions and hosted AuthPage sessions. A successful password reset does the same. Organization deactivation invalidates organization-bound OAuth and AuthPage sessions, and the SSO portal's organization-session revocation action invalidates matching-domain AuthPage sessions along with OAuth sessions.
+`GET /sqlos/auth/logout` ends one logical AuthPage session, including superseded cookies from renewal. `LogoutAllAsync` invalidates every AuthPage session for the user as well as OAuth sessions and refresh-token families. A successful password reset does the same. Organization deactivation invalidates organization-bound OAuth and AuthPage sessions, and the SSO portal's organization-session revocation action invalidates matching-domain AuthPage sessions along with OAuth sessions. Already-issued AuthPage cookies that predate session families are consumed when that schema is applied.
 
 ### Platform-admin revocation
 

@@ -323,16 +323,40 @@ public static partial class EndpointRouteBuilderExtensions
 
             if (existingSession != null && !promptForcesLogin)
             {
-                var completion = await authorizationServerService.CompleteAuthorizationRequestLoginAsync(
-                    authorizationRequest,
-                    existingSession.User,
-                    existingSession.AuthenticationMethod,
-                    context,
-                    cancellationToken,
-                    // Silent SSO reuses the session's original authentication moment, so
-                    // the consent gate stamps the true auth time into its pending token
-                    // instead of falling back to a later resolution.
-                    knownAuthenticatedAt: existingSession.AuthenticatedAt);
+                SqlOSAuthorizationRequestLoginResult completion;
+                try
+                {
+                    completion = await authorizationServerService.CompleteAuthorizationRequestLoginAsync(
+                        authorizationRequest,
+                        existingSession.User,
+                        existingSession.AuthenticationMethod,
+                        context,
+                        cancellationToken,
+                        // Silent SSO reuses the session's original authentication moment, so
+                        // the consent gate stamps the true auth time into its pending token
+                        // instead of falling back to a later resolution.
+                        knownAuthenticatedAt: existingSession.AuthenticatedAt);
+                }
+                catch (InvalidOperationException ex) when (string.Equals(
+                    ex.Message,
+                    SqlOSAuthPageSessionService.SessionNoLongerActiveMessage,
+                    StringComparison.Ordinal))
+                {
+                    if (promptRequestsNone)
+                    {
+                        return Results.Redirect(await authorizationServerService.BuildAuthorizationErrorRedirectAsync(
+                            authorizationRequest,
+                            "login_required",
+                            "The user is not signed in.",
+                            cancellationToken));
+                    }
+
+                    existingSession = null;
+                    completion = null!;
+                }
+
+                if (existingSession != null)
+                {
                 if ((completion.RequiresConsent || completion.RequiresOrganizationSelection || completion.RequiresMfa)
                     && promptRequestsNone)
                 {
@@ -433,6 +457,7 @@ public static partial class EndpointRouteBuilderExtensions
                 }
 
                 return Results.Redirect(completion.RedirectUrl!);
+                }
             }
 
             if (promptRequestsNone)
