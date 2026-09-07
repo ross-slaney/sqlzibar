@@ -39,7 +39,7 @@ internal sealed class SqlOSMcpHostExtension : ISqlOSHostExtension
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints, SqlOSOptions options)
     {
-        var path = SqlOSSingleApplicationSurfaces.NormalizePath(options.AuthServer.SingleApplication?.Mcp)
+        var path = SqlOSSingleApplicationSurfaces.NormalizePath(options.AuthServer.Application?.Mcp)
             ?? throw new InvalidOperationException(
                 "SqlOS.Mcp requires an MCP surface. Call app.Mcp(\"/mcp\", ...) inside UseSingleApplication.");
 

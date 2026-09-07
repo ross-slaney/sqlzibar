@@ -72,6 +72,9 @@ public class SqlOSAuthServerOptions
     public SqlOSAuthEmailSeedOptions? AuthEmailSeed { get; private set; }
     public SqlOSMfaSeedOptions? MfaSeed { get; private set; }
     public SqlOSSingleApplicationOptions? SingleApplication { get; private set; }
+
+    /// <summary>The host description, shared by the single-client preset and explicit client registration.</summary>
+    public SqlOSApplicationOptions? Application { get; private set; }
     public List<SqlOSClientSeedOptions> ClientSeeds { get; } = [];
     public List<SqlOSOidcConnectionSeedOptions> OidcConnectionSeeds { get; } = [];
     public List<SqlOSSamlConnectionSeedOptions> SamlConnectionSeeds { get; } = [];
@@ -296,6 +299,23 @@ public class SqlOSAuthServerOptions
         }
 
         SingleApplication = application;
+        return ConfigureApplicationCore(application, singleClientDefaults: true);
+    }
+
+    /// <summary>Describes the host without seeding a client. Register clients through the existing seeds, API, or dashboard.</summary>
+    public SqlOSAuthServerOptions ConfigureApplication(string name, Action<SqlOSApplicationOptions> configure)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(configure);
+        var application = new SqlOSApplicationOptions { Name = name };
+        configure(application);
+        SingleApplication = null;
+        return ConfigureApplicationCore(application, singleClientDefaults: false);
+    }
+
+    private SqlOSAuthServerOptions ConfigureApplicationCore(SqlOSApplicationOptions application, bool singleClientDefaults)
+    {
+        Application = application;
 
         // Single-application mode keeps CIMD and resource indicators off unless the description
         // declares an MCP surface: portable MCP clients (Codex, ChatGPT desktop, Claude) identify
@@ -303,8 +323,11 @@ public class SqlOSAuthServerOptions
         // Declaring `Api` alone changes nothing here; the first-party client simply receives the
         // API audience. DCR stays an explicit opt-in (EnableChatGptCompatibility).
         var hostsMcp = SqlOSSingleApplicationSurfaces.HasMcp(application);
-        ClientRegistration.Cimd.Enabled = hostsMcp;
-        ResourceIndicators.Enabled = hostsMcp;
+        if (hostsMcp || singleClientDefaults)
+        {
+            ClientRegistration.Cimd.Enabled = hostsMcp;
+            ResourceIndicators.Enabled = hostsMcp;
+        }
         if (hostsMcp
             && string.Equals(DefaultAudience, SqlOSSingleApplicationSurfaces.DefaultAudienceSentinel, StringComparison.Ordinal)
             && SqlOSSingleApplicationSurfaces.ResolveMcpAudience(application) is { } mcpAudience)
@@ -313,7 +336,7 @@ public class SqlOSAuthServerOptions
             DefaultAudience = mcpAudience;
         }
 
-        ApplySingleApplicationBranding(application);
+        ApplyApplicationBranding(application);
 
         foreach (var configure in application.HeadlessConfigurations)
         {
@@ -540,7 +563,7 @@ public class SqlOSAuthServerOptions
         return this;
     }
 
-    private void ApplySingleApplicationBranding(SqlOSSingleApplicationOptions application)
+    private void ApplyApplicationBranding(SqlOSApplicationOptions application)
     {
         if (application.ConfigureAuthPageBranding && AuthPageSeed == null)
         {

@@ -39,7 +39,7 @@ public sealed class SqlOSOptions
     /// <remarks>
     /// Single-application mode seeds one first-party PKCE client and can apply the application
     /// name to the hosted sign-in page and transactional email branding. Declaring
-    /// <see cref="SqlOSSingleApplicationOptions.Api"/> or <see cref="SqlOSSingleApplicationOptions.Mcp"/>
+    /// <see cref="SqlOSApplicationOptions.Api"/> or <see cref="SqlOSApplicationOptions.Mcp"/>
     /// makes SqlOS protect those same-process paths and serve their protected-resource metadata;
     /// an MCP surface also enables client ID metadata documents and resource indicators. Dynamic
     /// client registration stays off. It cannot be combined with explicit startup client seeds.
@@ -67,6 +67,13 @@ public sealed class SqlOSOptions
     public SqlOSOptions UseSingleApplication(IConfiguration configuration, string sectionName = "SqlOS:Application")
     {
         AuthServer.UseSingleApplication(configuration, sectionName);
+        return this;
+    }
+
+    /// <summary>Describes the host independently of client registration. Use SeedClient, the admin API, or the dashboard for clients.</summary>
+    public SqlOSOptions ConfigureApplication(string name, Action<SqlOSApplicationOptions> configure)
+    {
+        AuthServer.ConfigureApplication(name, configure);
         return this;
     }
 

@@ -28,13 +28,24 @@ public sealed class Note
 
 public sealed record NoteRequest(string Text);
 
+public sealed class Notebook
+{
+    public string UserId { get; set; } = string.Empty;
+}
+
 public sealed class NotesDbContext(DbContextOptions<NotesDbContext> options)
     : SqlOSDbContext<NotesDbContext>(options)
 {
     public DbSet<Note> Notes => Set<Note>();
+    public DbSet<Notebook> Notebooks => Set<Notebook>();
 
     protected override void OnApplicationModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Notebook>(entity =>
+        {
+            entity.HasKey(x => x.UserId);
+            entity.Property(x => x.UserId).HasMaxLength(100);
+        });
         modelBuilder.Entity<Note>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -59,6 +70,11 @@ public sealed class NotesService(NotesDbContext db, ISqlOSFgaAuthService fga)
 
     public async Task<Note> AddAsync(string userId, string text, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(text) || text.Trim().Length > 2000)
+        {
+            throw new ArgumentException("A note must contain between 1 and 2000 characters.", nameof(text));
+        }
+
         var notebookId = await EnsureNotebookAsync(userId, NotesAuthorization.WritePermission, ct);
         var note = new Note { Id = Guid.NewGuid(), NotebookId = notebookId, Text = text.Trim(), CreatedAt = DateTime.UtcNow };
         db.Notes.Add(note);
@@ -70,16 +86,40 @@ public sealed class NotesService(NotesDbContext db, ISqlOSFgaAuthService fga)
     {
         var notebookId = NotesAuthorization.NotebookId(userId);
 
-        // First use: provision the user's notebook and make them its owner.
-        await db.ProvisionUserSubjectAsync(userId, userId, cancellationToken: ct);
-        await db.ProvisionResourceWithIdAsync(notebookId, NotesAuthorization.NotebookType, $"Notebook of {userId}", cancellationToken: ct);
-        await db.GrantRoleAsync(userId, notebookId, NotesAuthorization.OwnerRole, ct);
-        await db.SaveChangesAsync(ct);
+        await CreateNotebookIfMissingAsync(userId, notebookId, ct);
 
         var access = await fga.CheckAccessAsync(userId, permission, notebookId);
         return access.Allowed
             ? notebookId
             : throw new UnauthorizedAccessException($"{userId} lacks {permission} on {notebookId}.");
+    }
+
+    private async Task CreateNotebookIfMissingAsync(string userId, string notebookId, CancellationToken ct)
+    {
+        if (await db.Notebooks.AnyAsync(x => x.UserId == userId, ct)) return;
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        db.Notebooks.Add(new Notebook { UserId = userId });
+        try
+        {
+            // The unique user key reserves creation across requests and replicas. Another creator
+            // waits for this transaction; it can only observe a notebook whose grant also committed.
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            await transaction.RollbackAsync(ct);
+            await transaction.DisposeAsync();
+            db.ChangeTracker.Clear();
+            if (!await db.Notebooks.AnyAsync(x => x.UserId == userId, ct)) throw;
+            return;
+        }
+
+        await db.ProvisionUserSubjectAsync(userId, userId, cancellationToken: ct);
+        await db.ProvisionResourceWithIdAsync(notebookId, NotesAuthorization.NotebookType, $"Notebook of {userId}", cancellationToken: ct);
+        await db.GrantRoleAsync(userId, notebookId, NotesAuthorization.OwnerRole, ct);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
     }
 }
 

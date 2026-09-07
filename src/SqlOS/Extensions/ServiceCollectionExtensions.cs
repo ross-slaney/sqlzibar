@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -43,7 +42,7 @@ public static class ServiceCollectionExtensions
 
         services.AddRouting();
         services.AddSingleton<SqlOSEndpointMappingState>();
-        services.AddSingleton<MatcherPolicy, SqlOSSurfaceMatcherPolicy>();
+        services.AddSingleton<SqlOSSurfaceProtectionState>();
         services.AddSingleton(Options.Create(options));
         services.AddSingleton(Options.Create(options.AuthServer));
         services.AddSingleton(Options.Create(options.Fga));
@@ -153,7 +152,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<SqlOSBootstrapHostedService>();
         services.AddSingleton<IStartupFilter, SqlOSPipelineStartupFilter>();
 
-        foreach (var extension in options.AuthServer.SingleApplication?.HostExtensions ?? [])
+        foreach (var extension in options.AuthServer.Application?.HostExtensions ?? [])
         {
             extension.ConfigureServices(services, options);
         }

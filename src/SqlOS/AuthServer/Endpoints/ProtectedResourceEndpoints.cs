@@ -16,7 +16,7 @@ internal static class ProtectedResourceEndpoints
         this IEndpointRouteBuilder endpoints,
         SqlOSAuthServerOptions authOptions)
     {
-        var surfaces = SqlOSSingleApplicationSurfaces.Describe(authOptions.SingleApplication);
+        var surfaces = SqlOSSingleApplicationSurfaces.Describe(authOptions.Application);
         if (surfaces.Count == 0)
         {
             return;
@@ -55,7 +55,7 @@ internal static class ProtectedResourceEndpoints
         endpoints.MapGet(path, (IOptions<SqlOSAuthServerOptions> options) =>
             {
                 var authOptions = options.Value;
-                var scopes = (authOptions.SingleApplication?.AllowedScopes ?? [])
+                var scopes = (authOptions.Application?.AllowedScopes ?? [])
                     .Where(static scope => !string.IsNullOrWhiteSpace(scope))
                     .Select(static scope => scope.Trim())
                     .Distinct(StringComparer.Ordinal)

@@ -4,7 +4,7 @@ using SqlOS.AuthServer.Configuration;
 namespace SqlOS.Mcp;
 
 /// <summary>
-/// Declares and hosts the MCP surface of a single-application SqlOS host.
+/// Declares and hosts the MCP surface of a SqlOS host.
 /// </summary>
 public static class SqlOSMcpSingleApplicationExtensions
 {
@@ -23,14 +23,15 @@ public static class SqlOSMcpSingleApplicationExtensions
     /// <c>MapMcp</c>, <c>MapSqlOS</c>, or <c>RequireSqlOSAccessToken</c>.
     /// Tools can inject <see cref="ISqlOSMcpUserContext"/> to act as the connecting user.
     /// </remarks>
-    /// <param name="app">The single-application description.</param>
+    /// <param name="app">The application description.</param>
     /// <param name="path">The absolute MCP path prefix under the application origin, for example <c>/mcp</c>.</param>
     /// <param name="configure">Configures the MCP SDK server builder.</param>
     /// <returns>The same <paramref name="app"/> for chaining.</returns>
-    public static SqlOSSingleApplicationOptions Mcp(
-        this SqlOSSingleApplicationOptions app,
+    public static TApplication Mcp<TApplication>(
+        this TApplication app,
         string path,
         Action<IMcpServerBuilder> configure)
+        where TApplication : SqlOSApplicationOptions
     {
         ArgumentNullException.ThrowIfNull(app);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -39,7 +40,7 @@ public static class SqlOSMcpSingleApplicationExtensions
         if (app.HostExtensions.Any(extension => extension is SqlOSMcpHostExtension))
         {
             throw new InvalidOperationException(
-                "app.Mcp(path, configure) was called more than once. A single-application host has one MCP surface.");
+                "app.Mcp(path, configure) was called more than once. An application host has one MCP surface.");
         }
 
         app.Mcp = path;

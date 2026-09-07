@@ -17,6 +17,63 @@ namespace SqlOS.Tests;
 public sealed class SqlOSSingleApplicationTests
 {
     [TestMethod]
+    public async Task ConfigureApplication_GraduationRetainsExistingClientAndAddsSecondClient()
+    {
+        SqlOSAuthServerOptions configured = null!;
+        await using var harness = CreateHarness(options =>
+        {
+            configured = options;
+            options.UseSingleApplication("Todo", app =>
+            {
+                app.Origin = "https://todo.example.com";
+                app.Api = "/api";
+                app.Mcp = "/mcp";
+            });
+        });
+        await harness.Admin.UpsertSeededClientsAsync();
+        var original = await harness.Context.Set<SqlOSClientApplication>().SingleAsync();
+        var originalId = original.Id;
+        var originalAudience = original.Audience;
+        var originalRedirects = original.RedirectUrisJson;
+        var originalScopes = original.AllowedScopesJson;
+
+        configured.ConfigureApplication("Todo", app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Api = "/api";
+            app.Mcp = "/mcp";
+        });
+        configured.SeedClient(client =>
+        {
+            client.ClientId = "todo";
+            client.Name = "Todo";
+            client.ClientType = "public_pkce";
+            client.IsFirstParty = true;
+            client.Audience = originalAudience;
+            client.RedirectUris = DeserializeJsonList(originalRedirects);
+            client.AllowedScopes = DeserializeJsonList(originalScopes);
+        });
+        configured.SeedBrowserClient("portal", "Portal", "https://portal.example.com/auth/callback");
+        await harness.Admin.UpsertSeededClientsAsync();
+        await harness.Admin.UpsertSeededClientsAsync();
+
+        var clients = await harness.Context.Set<SqlOSClientApplication>().ToListAsync();
+        clients.Should().HaveCount(2);
+        var retained = clients.Single(x => x.ClientId == "todo");
+        retained.Id.Should().Be(originalId);
+        retained.Audience.Should().Be(originalAudience);
+        retained.RedirectUrisJson.Should().Be(originalRedirects);
+        retained.AllowedScopesJson.Should().Be(originalScopes);
+        retained.IsFirstParty.Should().BeTrue();
+        retained.RequirePkce.Should().BeTrue();
+        configured.SingleApplication.Should().BeNull();
+        configured.Application!.Api.Should().Be("/api");
+        configured.Application.Mcp.Should().Be("/mcp");
+        configured.ClientRegistration.Cimd.Enabled.Should().BeTrue();
+        configured.ResourceIndicators.Enabled.Should().BeTrue();
+    }
+
+    [TestMethod]
     public async Task SingleApplication_Defaults_SeedsPublicPkceApplication()
     {
         await using var harness = CreateHarness(options =>

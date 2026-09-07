@@ -5,7 +5,7 @@ order: 1
 section: authserver
 ---
 
-This is the standard SqlOS shape and the one almost every product should start with: one SaaS app, described once. You get organizations, users, sessions, SSO, invitations, and permissions without thinking about OAuth clients, token validation middleware, or metadata documents. The [multiple-applications shape](/docs/authserver/multiple-applications) exists for when a second application must sign in with your accounts.
+This is the standard SqlOS shape and the one almost every product should start with: one SaaS app, described once. You get organizations, users, sessions, SSO, invitations, and permissions with a derived first-party OAuth client, surface audiences, and metadata documents. The [multiple-applications shape](/docs/authserver/multiple-applications) exists for when a second application must sign in with your accounts.
 
 ```csharp
 builder.AddSqlOS<AppDbContext>(options =>
@@ -55,6 +55,22 @@ app.Run();
 | `Authorization(...)` | Forwards to `Fga.Seed`. |
 
 The auth server, hosted sign-in pages, and dashboard are mapped by `AddSqlOS` at startup. `app.MapSqlOS()` is obsolete; calling it remains safe and idempotent and logs one warning.
+
+## Browser sign-in and middleware placement
+
+The client registration does not implement your browser callback. Use your framework's OIDC handler to start authorization, validate the callback, and establish the application's cookie. The [Notes sample](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api) includes a complete browser, API, and MCP journey.
+
+Bearer-only hosts get an automatic early surface guard. When ASP.NET authentication is registered, place the guard explicitly; otherwise startup fails with guidance:
+
+```csharp
+app.UseRouting();
+// app.UseCors("frontend"); // after configuring that CORS policy
+app.UseAuthentication();
+app.UseSqlOSSurfaceProtection();
+app.UseAuthorization();
+```
+
+Put exception handling, `UsePathBase`, and rewriting before routing and the guard; put protected middleware branches after it. Configure paths relative to `PathBase`; the audience remains the configured `{Origin}{Api}` or `{Origin}{Mcp}`. A configured CORS policy may answer preflight, but an arbitrary `OPTIONS` request is not exempt. The bearer identity replaces the cookie identity within a protected surface; authorization policies should use that current principal.
 
 ## Hosted or headless
 
@@ -148,9 +164,15 @@ builder.AddSqlOS<AppDbContext>(options =>
 
 `Api` and `Mcp` bind the same way as in code. Hosting the MCP server itself still requires the `app.Mcp(path, configure)` call from `SqlOS.Mcp`, since tool registration is code.
 
+## Branding and permission ownership
+
+`Brand` customizes `AuthServer.SeedAuthPage`. Default page and email branding are seeded even when `Brand` is omitted. To let operators own new settings, set `ConfigureAuthPageBranding = false` and `ConfigureEmailBranding = false` and omit explicit branding seeds. Existing code-owned records become orphaned when their seed is removed; an authorized dashboard save can then claim them. See [auth branding](/docs/guides/auth-branding).
+
+`Authorization` seeds vocabulary, not grants or enforcement. Your services must provision subjects/resources, assign roles during actual provisioning, and check access or filter queries on every operation. Never re-grant a role during ordinary reads after access was revoked. The [Notes authorization model](https://github.com/ross-slaney/sqlos/blob/main/examples/SqlOS.OneCall.Api/AUTHORIZATION.md) and [EF authorization quickstart](/docs/quickstarts/ef-authorization) show both steps.
+
 ## When to graduate
 
-Move to the [multiple-applications shape](/docs/authserver/multiple-applications) when you have more than one app experience, such as a customer portal, an admin console, a CLI, and a partner integration. At that point, use seeded clients or the dashboard to manage each application and use [Application Access](/docs/authserver/application-access) to control who can use each one.
+Move to the [multiple-applications shape](/docs/authserver/multiple-applications) when you have more than one app experience, such as a customer portal, an admin console, a CLI, and a partner integration. Replace `UseSingleApplication` with `ConfigureApplication`, preserve the existing host description, and explicitly seed the original client with its existing ID, audience, callbacks, and scopes. Then use seeded clients or the dashboard to manage each application and use [Application Access](/docs/authserver/application-access) to control who can use each one.
 
 For the product framing behind the simple path, read [Single-Application Mode: WorkOS-Style Defaults Without Giving Up SqlOS](/blog/single-application-mode-workos-style-setup).
 

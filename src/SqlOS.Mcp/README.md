@@ -1,7 +1,7 @@
 # SqlOS.Mcp
 
 Hosts a [Model Context Protocol](https://modelcontextprotocol.io) server on the MCP surface declared by
-SqlOS single-application mode. Companion package for [SqlOS](https://www.nuget.org/packages/SqlOS);
+`UseSingleApplication` or `ConfigureApplication`. Companion package for [SqlOS](https://www.nuget.org/packages/SqlOS);
 ships on the same version line.
 
 ```csharp
@@ -29,6 +29,8 @@ Declaring the surface makes SqlOS:
   SDK builder unchanged, and map it on the protected branch at startup,
 - record a SqlOS audit event per tool call (tool name, subject, client, outcome; never arguments or tokens).
 
-Tools can inject `ISqlOSMcpUserContext` to act as the connecting user without touching the raw token.
+With ASP.NET authentication, place `app.UseSqlOSSurfaceProtection()` after `UseAuthentication()` and before `UseAuthorization()` or protected handlers. Put CORS and rewriting before the guard too. Bearer-only hosts get an automatic early guard. `ConfigureApplication` retains this hosting setup while you register multiple clients explicitly.
+
+Tools can inject `ISqlOSMcpUserContext` to act as the connecting user without touching the raw token. Tools must still call application services that enforce permissions; hosting and authentication do not grant access to application data.
 
 Documentation: https://sqlos.dev/docs/authserver/mcp-server

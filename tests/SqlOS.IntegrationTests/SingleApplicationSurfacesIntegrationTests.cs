@@ -67,10 +67,12 @@ public sealed class SingleApplicationSurfacesIntegrationTests
         metadata.TryGetProperty("registration_endpoint", out _).Should().BeFalse("DCR is not enabled by declaring an MCP surface");
     }
 
-    [TestMethod]
-    public async Task FirstPartyBrowserClient_ReceivesApiAudience_AndIsRejectedAtMcp()
+    [DataTestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task FirstPartyBrowserClient_ReceivesApiAudience_AndIsRejectedAtMcp(bool explicitClients)
     {
-        await using var fixture = await CreateFixtureAsync();
+        await using var fixture = await CreateFixtureAsync(explicitClients);
 
         var tokens = await AuthorizeFirstPartyAsync(fixture, "openid profile petals.read");
         var accessToken = tokens.RootElement.GetProperty("access_token").GetString()!;
@@ -110,10 +112,12 @@ public sealed class SingleApplicationSurfacesIntegrationTests
         allowedResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
-    [TestMethod]
-    public async Task CodexShapedCimdClient_CompletesFlowWithEphemeralLoopbackPort_AndCallsMcpTools()
+    [DataTestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task CodexShapedCimdClient_CompletesFlowWithEphemeralLoopbackPort_AndCallsMcpTools(bool explicitClients)
     {
-        await using var fixture = await CreateFixtureAsync();
+        await using var fixture = await CreateFixtureAsync(explicitClients);
 
         var started = await fixture.StartAuthorizeAsync(
             "openid profile petals.read",
@@ -156,19 +160,40 @@ public sealed class SingleApplicationSurfacesIntegrationTests
         audit.MetadataJson.Should().Contain("\"outcome\":\"succeeded\"").And.NotContain(accessToken);
     }
 
-    private static async Task<HostedAuthorizeTokenFixture> CreateFixtureAsync()
+    private static async Task<HostedAuthorizeTokenFixture> CreateFixtureAsync(bool explicitClients = false)
         => await HostedAuthorizeTokenFixture.CreateAsync(
             "SingleAppSurfaces",
             configure: options =>
             {
-                options.AuthServer.UseSingleApplication("PetalPal", app =>
+                void Describe(SqlOS.AuthServer.Configuration.SqlOSApplicationOptions app)
                 {
                     app.Origin = Origin;
-                    app.RedirectUris.Add(HostedAuthorizeTokenFixture.RedirectUri);
                     app.AllowedScopes = ["openid", "profile", "email", "offline_access", "petals.read", "petals.write"];
                     app.Api = "/api";
                     app.Mcp("/mcp", mcp => mcp.WithTools<PetalTools>());
-                });
+                }
+                if (explicitClients)
+                {
+                    options.ConfigureApplication("PetalPal", Describe);
+                    options.AuthServer.SeedClient(client =>
+                    {
+                        client.ClientId = "petalpal";
+                        client.Name = "PetalPal";
+                        client.Audience = ApiAudience;
+                        client.IsFirstParty = true;
+                        client.AllowedScopes = ["openid", "profile", "email", "offline_access", "petals.read", "petals.write"];
+                        client.RedirectUris = [Origin + "/auth/callback", HostedAuthorizeTokenFixture.RedirectUri];
+                    });
+                    options.AuthServer.SeedBrowserClient("second-portal", "Second Portal", "https://portal.example/callback");
+                }
+                else
+                {
+                    options.UseSingleApplication("PetalPal", app =>
+                    {
+                        Describe(app);
+                        app.RedirectUris.Add(HostedAuthorizeTokenFixture.RedirectUri);
+                    });
+                }
                 options.AuthServer.ClientRegistration.Cimd.TrustedHosts.Add("portable.example.test");
             },
             configureServices: services => services.AddSingleton<IHttpClientFactory>(

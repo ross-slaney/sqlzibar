@@ -28,7 +28,7 @@ internal sealed record SqlOSSingleApplicationSurface(
 
 /// <summary>
 /// Derives protocol consequences (audiences, realms, protected-resource documents) from the
-/// <see cref="SqlOSSingleApplicationOptions.Api"/> and <see cref="SqlOSSingleApplicationOptions.Mcp"/>
+/// <see cref="SqlOSApplicationOptions.Api"/> and <see cref="SqlOSApplicationOptions.Mcp"/>
 /// declarations. This is the single source of truth shared by the options derivation, the startup
 /// validator, the client seed, the startup filter, and the metadata endpoints.
 /// </summary>
@@ -48,20 +48,20 @@ internal static class SqlOSSingleApplicationSurfaces
         return trimmed.Length > 1 ? trimmed.TrimEnd('/') : trimmed;
     }
 
-    public static bool HasApi(SqlOSSingleApplicationOptions? application)
+    public static bool HasApi(SqlOSApplicationOptions? application)
         => NormalizePath(application?.Api) != null;
 
-    public static bool HasMcp(SqlOSSingleApplicationOptions? application)
+    public static bool HasMcp(SqlOSApplicationOptions? application)
         => NormalizePath(application?.Mcp) != null;
 
-    public static bool HasAnySurface(SqlOSSingleApplicationOptions? application)
+    public static bool HasAnySurface(SqlOSApplicationOptions? application)
         => HasApi(application) || HasMcp(application);
 
     /// <summary>
     /// Returns the application origin as <c>scheme://authority</c> when it is an absolute http(s)
     /// URI without path, query, or fragment; otherwise <see langword="null"/>.
     /// </summary>
-    public static string? TryGetOrigin(SqlOSSingleApplicationOptions? application)
+    public static string? TryGetOrigin(SqlOSApplicationOptions? application)
     {
         if (application == null
             || string.IsNullOrWhiteSpace(application.Origin)
@@ -79,14 +79,14 @@ internal static class SqlOSSingleApplicationSurfaces
         return uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
     }
 
-    public static string? ResolveApiAudience(SqlOSSingleApplicationOptions? application)
+    public static string? ResolveApiAudience(SqlOSApplicationOptions? application)
     {
         var path = NormalizePath(application?.Api);
         var origin = TryGetOrigin(application);
         return path == null || origin == null ? null : $"{origin}{path}";
     }
 
-    public static string? ResolveMcpAudience(SqlOSSingleApplicationOptions? application)
+    public static string? ResolveMcpAudience(SqlOSApplicationOptions? application)
     {
         var path = NormalizePath(application?.Mcp);
         var origin = TryGetOrigin(application);
@@ -107,7 +107,7 @@ internal static class SqlOSSingleApplicationSurfaces
         return ResolveApiAudience(application) ?? clientId;
     }
 
-    public static IReadOnlyList<SqlOSSingleApplicationSurface> Describe(SqlOSSingleApplicationOptions? application)
+    public static IReadOnlyList<SqlOSSingleApplicationSurface> Describe(SqlOSApplicationOptions? application)
     {
         if (application == null)
         {
@@ -159,7 +159,7 @@ internal static class SqlOSSingleApplicationSurfaces
     /// </summary>
     public static void ApplyHostConfiguration(SqlOSOptions options)
     {
-        var application = options.AuthServer.SingleApplication;
+        var application = options.AuthServer.Application;
         if (application == null || application.AuthorizationConfigurations.Count == 0)
         {
             return;

@@ -78,6 +78,8 @@ Your frontend then talks to a typed state machine (`npm install @sqlos/headless`
   `AddSqlOS` does not automatically bind an `SqlOS` configuration section. Read values from `builder.Configuration`, your secret store, or environment variables and assign them in the options callback as shown above. (`options.UseSingleApplication(builder.Configuration)` binds just the application description from `SqlOS:Application`.)
 </Callout>
 
+Your browser still needs an OIDC client to start sign-in and handle the callback. See the [complete Notes sample](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api). Hosts with ASP.NET authentication must place `UseSqlOSSurfaceProtection()` after `UseAuthentication()` and before `UseAuthorization()`; place CORS and rewriting before the guard too.
+
 `UseSingleApplication` creates one first-party PKCE client, a callback at `{Origin}/auth/callback`, a default client allowlist (`openid`, `profile`, `email`, `offline_access`), and matching AuthPage branding. With [OpenID Provider mode](/docs/authserver/openid-provider) enabled (the default), authorization-server metadata advertises `openid`, `profile`, and `email`; `offline_access` stays on the client only for gateway compatibility and is not advertised, because SqlOS issues refresh tokens to code-flow clients without gating them on that scope. DCR stays off; CIMD and resource indicators turn on only when you declare `Mcp`.
 
 Switch the EF callback to `UseNpgsql(connectionString)` to run the same host on PostgreSQL. See [Choose SQL Server or PostgreSQL](/docs/guides/choosing-a-provider).
@@ -95,7 +97,7 @@ Adding SqlOS to your application is the canonical integration path; running the 
 
 ## Second shape: many applications (identity provider)
 
-When other applications should sign in with your accounts — a separate SPA and API, partner apps, CLIs, or "Sign in with Acme" — the same host becomes an identity provider. Drop `UseSingleApplication` and declare each client explicitly with `options.AuthServer.SeedClient(...)` (or create them from the dashboard or admin API; all three share one validation and audit path). Everything from the standard flow still applies; you additionally get per-client consent, audiences, portable-client registration, and machine clients.
+When other applications should sign in with your accounts — a separate SPA and API, partner apps, CLIs, or "Sign in with Acme" — the same host becomes an identity provider. Replace `UseSingleApplication` with `ConfigureApplication` to retain the host description, then declare each client explicitly with `options.AuthServer.SeedClient(...)` (or create them from the dashboard or admin API; all three share one validation and audit path). Everything from the standard flow still applies; you additionally get per-client consent, audiences, portable-client registration, and machine clients.
 
 → [Multiple applications](/docs/authserver/multiple-applications) · [Sign in with X](/docs/guides/sign-in-with-x) · [Clients](/docs/authserver/clients)
 

@@ -426,12 +426,13 @@ internal static class SqlOSOptionsValidator
         string? authBasePath,
         List<string> errors)
     {
-        var application = options.AuthServer.SingleApplication;
+        var application = options.AuthServer.Application;
         if (application == null)
         {
             return;
         }
 
+        var property = options.AuthServer.SingleApplication != null ? "AuthServer.SingleApplication" : "AuthServer.Application";
         var hasApi = application.Api != null;
         var hasMcp = application.Mcp != null;
         if (!hasApi && !hasMcp)
@@ -439,40 +440,41 @@ internal static class SqlOSOptionsValidator
             return;
         }
 
-        var apiPath = hasApi ? ValidateSurfacePath(application.Api, "AuthServer.SingleApplication.Api", dashboardBasePath, authBasePath, errors) : null;
-        var mcpPath = hasMcp ? ValidateSurfacePath(application.Mcp, "AuthServer.SingleApplication.Mcp", dashboardBasePath, authBasePath, errors) : null;
+        var apiPath = hasApi ? ValidateSurfacePath(application.Api, $"{property}.Api", dashboardBasePath, authBasePath, errors) : null;
+        var mcpPath = hasMcp ? ValidateSurfacePath(application.Mcp, $"{property}.Mcp", dashboardBasePath, authBasePath, errors) : null;
 
         if (apiPath != null && mcpPath != null
             && (string.Equals(apiPath, mcpPath, StringComparison.OrdinalIgnoreCase)
                 || apiPath.StartsWith(mcpPath + "/", StringComparison.OrdinalIgnoreCase)
                 || mcpPath.StartsWith(apiPath + "/", StringComparison.OrdinalIgnoreCase)))
         {
-            errors.Add($"AuthServer.SingleApplication.Api ('{apiPath}') and AuthServer.SingleApplication.Mcp ('{mcpPath}') must be distinct, non-nested path prefixes.");
+            errors.Add($"{property}.Api ('{apiPath}') and {property}.Mcp ('{mcpPath}') must be distinct, non-nested path prefixes.");
         }
 
         if (SqlOSSingleApplicationSurfaces.TryGetOrigin(application) == null)
         {
-            errors.Add("AuthServer.SingleApplication.Origin must be an absolute http(s) origin without path, query, or fragment when AuthServer.SingleApplication.Api or AuthServer.SingleApplication.Mcp is set.");
+            errors.Add($"{property}.Origin must be an absolute http(s) origin without path, query, or fragment when {property}.Api or {property}.Mcp is set.");
         }
 
         if (apiPath != null
-            && !string.IsNullOrWhiteSpace(application.Audience)
+            && application is SqlOSSingleApplicationOptions single
+            && !string.IsNullOrWhiteSpace(single.Audience)
             && SqlOSSingleApplicationSurfaces.ResolveApiAudience(application) is { } apiAudience
-            && !string.Equals(application.Audience.Trim(), apiAudience, StringComparison.Ordinal))
+            && !string.Equals(single.Audience.Trim(), apiAudience, StringComparison.Ordinal))
         {
-            errors.Add($"AuthServer.SingleApplication.Audience must be '{apiAudience}' (or left unset) when AuthServer.SingleApplication.Api is '{apiPath}': the browser client and the API must agree on the token audience.");
+            errors.Add($"{property}.Audience must be '{apiAudience}' (or left unset) when {property}.Api is '{apiPath}': the browser client and the API must agree on the token audience.");
         }
 
         if (mcpPath != null)
         {
             if (!options.AuthServer.ClientRegistration.Cimd.Enabled)
             {
-                errors.Add("AuthServer.SingleApplication.Mcp is set but AuthServer.ClientRegistration.Cimd.Enabled is false. Declaring an MCP surface enables client ID metadata documents; remove the later ConfigureClientRegistration/ClientRegistration.Cimd.Enabled = false call or remove AuthServer.SingleApplication.Mcp.");
+                errors.Add($"{property}.Mcp is set but AuthServer.ClientRegistration.Cimd.Enabled is false. Declaring an MCP surface enables client ID metadata documents; remove the later ConfigureClientRegistration/ClientRegistration.Cimd.Enabled = false call or remove {property}.Mcp.");
             }
 
             if (!options.AuthServer.ResourceIndicators.Enabled)
             {
-                errors.Add("AuthServer.SingleApplication.Mcp is set but AuthServer.ResourceIndicators.Enabled is false. Declaring an MCP surface enables resource indicators; remove the later ConfigureResourceIndicators/ResourceIndicators.Enabled = false call or remove AuthServer.SingleApplication.Mcp.");
+                errors.Add($"{property}.Mcp is set but AuthServer.ResourceIndicators.Enabled is false. Declaring an MCP surface enables resource indicators; remove the later ConfigureResourceIndicators/ResourceIndicators.Enabled = false call or remove {property}.Mcp.");
             }
         }
     }

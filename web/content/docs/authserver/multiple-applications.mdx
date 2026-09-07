@@ -1,80 +1,93 @@
 ---
 title: "Multiple Applications (identity provider)"
-description: "Move from the standard one-app flow to explicit clients when a second application must sign in with your accounts."
+description: "Keep your host configuration and register explicit clients for applications that sign in through SqlOS."
 order: 2
 section: authserver
 ---
 
-The [standard flow](/docs/authserver/single-application) describes one product in one call. Use this second shape when other applications need to sign in with your accounts: a separate SPA and API, a native or CLI client, a partner integration, or products that offer "Sign in with Acme". The host is the same; the difference is that you declare each client explicitly instead of letting `UseSingleApplication` derive one.
+Use SqlOS as an OpenID Connect provider when several applications should sign in with your accounts. `ConfigureApplication` describes the host independently of client registration. It supports the same API and MCP surfaces, branding, headless UI, and authorization seeds as `UseSingleApplication`, but does not create a client.
 
-Stay on the standard flow until a second application actually exists. `Api` and `Mcp` surfaces, hosted or headless login, branding, FGA, and the dashboard all work there, and you can graduate later without changing the runtime.
+## Graduate an existing application
 
-## Declare each client
-
-Drop `UseSingleApplication` and seed clients. The origin and issuer no longer derive from an application, so set them once:
+Suppose the existing host used `UseSingleApplication("Acme", app => ...)` at `https://acme.example.com`, with `/api` and `/mcp`. Preserve that topology and register its derived client explicitly before adding the second application:
 
 ```csharp
-builder.AddSqlOS<AppDbContext>(
-    db => db.UseSqlServer(connectionString),
-    options =>
+using Microsoft.EntityFrameworkCore;
+using SqlOS.Extensions;
+using SqlOS.Mcp;
+
+builder.AddSqlOS<AppDbContext>(db => db.UseSqlServer(connectionString), options =>
+{
+    options.ConfigureApplication("Acme", app =>
     {
-        options.AuthServer.PublicOrigin = "https://id.acme.example.com";
-        options.AuthServer.Issuer = "https://id.acme.example.com/sqlos/auth";
-
-        // Your own browser app: first-party, PKCE, no consent screen.
-        options.AuthServer.SeedClient(client =>
-        {
-            client.ClientId = "acme-web";
-            client.Name = "Acme Web";
-            client.ClientType = "public_pkce";
-            client.RedirectUris = ["https://app.acme.example.com/auth/callback"];
-            client.AllowedScopes = ["openid", "profile", "email", "offline_access"];
-            client.Audience = "https://api.acme.example.com";
-            client.IsFirstParty = true;
-        });
-
-        // A partner product using your accounts: third party, consent screen, named scopes.
-        options.AuthServer.SeedClient(client =>
-        {
-            client.ClientId = "partner-portal";
-            client.Name = "Partner Portal";
-            client.ClientType = "confidential";
-            client.RedirectUris = ["https://portal.partner.example/oauth/callback"];
-            client.AllowedScopes = ["openid", "profile", "email"];
-        });
-
-        options.AuthServer.SeedAuthPage(page => page.PageTitle = "Sign in to Acme");
-        // options.AuthServer.UseHeadlessAuthPage(headless => headless.BuildUiUrl = ...);
+        app.Origin = "https://acme.example.com";
+        app.Api = "/api";
+        app.Mcp("/mcp", mcp => mcp.WithTools<AcmeTools>());
+        app.Brand(page => page.PrimaryColor = "#0f172a");
+        app.Authorization(fga => fga
+            .ResourceType("project", "Project")
+            .Permission("PROJECT_READ", "Read projects", "project")
+            .Role("project_viewer", "Viewer").Can("PROJECT_READ"));
     });
+
+    // Preserve the existing client identity and every security-relevant setting.
+    options.AuthServer.SeedClient(client =>
+    {
+        client.ClientId = "acme";
+        client.Name = "Acme";
+        client.ClientType = "public_pkce";
+        client.RequirePkce = true;
+        client.IsFirstParty = true;
+        client.Audience = "https://acme.example.com/api";
+        client.RedirectUris = ["https://acme.example.com/auth/callback"];
+        client.AllowedScopes = ["openid", "profile", "email", "offline_access"];
+    });
+    options.AuthServer.SeedClient(client =>
+    {
+        client.ClientId = "customer-portal";
+        client.Name = "Customer Portal";
+        client.ClientType = "public_pkce";
+        client.RequirePkce = true;
+        client.IsFirstParty = true;
+        client.Audience = "https://acme.example.com/api";
+        client.RedirectUris = ["https://portal.acme.example.com/auth/callback"];
+        client.AllowedScopes = ["openid", "profile", "email"];
+    });
+});
 ```
 
-Clients can equally be created from the dashboard (**Auth Server > Clients**) or the admin API. All three control planes share one validation, tenancy, secret handling, and audit path; code-owned records are reconciled at startup and are read-only in the dashboard.
+Keep your actual branding, permission model, tools, issuer, scopes, and client overrides when making this change. Both clients above can obtain API-audience tokens; MCP clients still request the distinct MCP resource. The existing client retains its database identity on reconciliation. No endpoint or domain-service rewrite is required.
 
-## What changes compared with one application
+Do not combine `UseSingleApplication` with explicit startup client seeds. Startup rejects that combination. Moving the issuer to another origin is a separate deployment migration, not a prerequisite for adding a client.
 
-| Concern | Standard flow | Multiple applications |
+## A central identity-provider deployment
+
+A dedicated host can instead live at `https://id.acme.example.com`. Set `AuthServer.PublicOrigin` to that origin and `AuthServer.Issuer` to `https://id.acme.example.com/sqlos/auth`. It publishes OIDC discovery at `/sqlos/auth/.well-known/openid-configuration`. Each application registers its own exact callback and configures its OIDC handler with this authority.
+
+The [README](https://github.com/ross-slaney/sqlos#multiple-applications-sqlos-as-your-identity-provider) contains complete provider and ASP.NET Core relying-party programs, including a confidential partner client with a secret resolved from host configuration. The [Sign in with X guide](/docs/guides/sign-in-with-x) demonstrates the complete provider-to-Next.js journey.
+
+| Concern | Single application | Explicit clients |
 | --- | --- | --- |
-| Client registration | One first-party PKCE client derived from `Origin` | One `SeedClient` (or dashboard/API record) per application |
-| Issuer and origin | Derived from `app.Origin` | `AuthServer.PublicOrigin` and `AuthServer.Issuer`, set once |
-| Audiences | `{Origin}/api` and `{Origin}/mcp` | Per client via `client.Audience`; APIs validate with `RequireSqlOSAccessToken(audience)` or `UseSqlOSAccessTokenValidation` |
-| Consent | Never shown (first party) | Shown for third-party clients; name scopes with `SeedScopeDisplayName` |
-| Hosted vs headless | `app.Brand(...)` / `app.Headless(...)` | `AuthServer.SeedAuthPage(...)` / `AuthServer.UseHeadlessAuthPage(...)` |
-| Authorization model | `app.Authorization(...)` | `options.Fga.Seed(...)` |
-| Portable and machine clients | CIMD + resource indicators on when `Mcp` is declared | Opt in per need: [CIMD](/docs/authserver/client-id-metadata-documents), [DCR](/docs/authserver/dynamic-client-registration), [machine clients](/docs/authserver/machine-clients) |
+| Host | `UseSingleApplication` | `ConfigureApplication`; same host options |
+| Browser clients | One derived first-party PKCE client | One seed, dashboard record, or API operation per client |
+| Local API/MCP protection | Derived from declared paths | Same protection; configure each client's audience deliberately |
+| Consent | Derived client is first-party | Third-party clients request consent; first-party clients skip it |
+| Scope configuration | Application scopes also seed the derived client | Application scopes describe resources; each explicit client has its own allowlist |
+| Branding and FGA | `Brand`, `Headless`, `Authorization` | The same methods, or the underlying seed APIs |
+| Portable MCP clients | CIMD and resource indicators enabled by MCP | Same behavior when MCP is declared; DCR remains opt-in |
 
-Everything else — users, organizations, sessions, invitations, sign-in methods, MFA, SCIM, audit — is identical. The auth server, hosted pages, and dashboard are still mapped by `AddSqlOS` at startup.
+Clients created through the dashboard and administration API coexist with code-owned clients under distinct IDs. Startup does not overwrite operator-owned records. [Application Access](/docs/authserver/application-access) controls which organizations and principals can use each client; audience checks control where the resulting token is accepted.
 
-## Common shapes
+## OIDC and SCIM directions
 
-- **Separate SPA and API.** Seed the SPA as a public PKCE client with `Audience` set to the API's origin; protect the API with [`RequireSqlOSAccessToken`](/docs/quickstarts/protect-api) for that audience. See [Protect an API](/docs/quickstarts/protect-api).
-- **Sign in with Acme.** Register each relying party as a third-party client, name your scopes for the consent screen, and point the relying party at your discovery document. See [Sign in with X](/docs/guides/sign-in-with-x).
-- **CLIs and terminal apps.** Enable device authorization on a public client. See [Terminal auth](/docs/guides/terminal-auth).
-- **Background jobs and services.** Confidential clients with client credentials, bound to a service account. See [Machine clients](/docs/authserver/machine-clients) and [Service accounts](/docs/guides/service-account-jobs).
-- **Who may use which application.** Control access per organization with [Application Access](/docs/authserver/application-access).
+- **Downstream OIDC:** SqlOS is the provider. Your applications redirect users to it, validate its ID tokens, and fetch profile claims from UserInfo. Each relying party manages its own application cookie.
+- **Upstream OIDC/SAML:** an enterprise or social identity provider authenticates a user into SqlOS. These connections are separate from downstream client registrations.
+- **Inbound SCIM:** an external directory provisions users and groups into a SqlOS organization. Enable `AuthServer.EnableScim`, then create a connection and group mappings through the [SCIM configuration workflow](/docs/authserver/scim-directory-sync). This does not replace SSO or application access policies.
+- **Outbound SCIM:** not implemented. SqlOS does not push accounts to downstream SaaS services; that requires a separate provisioning integration.
 
-## Related
+## Other application types
 
-- [Clients](/docs/authserver/clients): every onboarding path in detail (owned, confidential, CLI, portable, compatibility)
-- [Scopes and permissions](/docs/authserver/scopes-and-permissions)
-- [Hosted vs headless](/docs/authserver/hosted-vs-headless)
-- [Single application (standard flow)](/docs/authserver/single-application)
+- [Machine clients](/docs/authserver/machine-clients): client credentials bound to service accounts.
+- [Terminal auth](/docs/guides/terminal-auth): device authorization for CLIs.
+- [Clients](/docs/authserver/clients): registration, callback validation, credentials, and ownership.
+- [OpenID Provider](/docs/authserver/openid-provider): discovery, ID tokens, UserInfo, and protocol behavior.

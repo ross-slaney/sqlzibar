@@ -1,276 +1,356 @@
 # SqlOS
 
-**A complete auth stack for .NET B2B SaaS — inside your app, on the SQL Server or PostgreSQL database you already run. No identity service to deploy.**
+**Authentication and authorization for .NET applications, running in your process and your SQL Server or PostgreSQL database.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![NuGet](https://img.shields.io/nuget/v/SqlOS)](https://www.nuget.org/packages/SqlOS)
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-purple)](https://dotnet.microsoft.com)
 
-One NuGet package adds authentication *and* authorization to an ASP.NET Core app: an OAuth 2.0 / OpenID Connect server, a branded login and signup UI, organizations and sessions, hierarchical role-based access control that filters your EF Core queries in SQL, and an admin dashboard. Everything runs in your process and stores in your database — nothing extra to stand up, pay for, or keep in sync with your data.
+SqlOS gives your application hosted sign-in, enterprise SSO, organizations, sessions, an admin dashboard, and fine-grained authorization that filters EF Core queries in SQL. You own the accounts and data, and run the infrastructure.
 
-SqlOS has two shapes. **The standard one is one application, described in one call** — that is what almost every product needs and where you should start. The second shape, an identity provider for many applications, builds on the same host and is covered [after it](#second-shape-many-applications-identity-provider).
+Start with either shape:
 
-## The standard flow: one app, one call
+| What you are building | Configuration | What users experience |
+| --- | --- | --- |
+| **One SaaS application** — the WorkOS-like integration path, embedded in your app | `UseSingleApplication(...)` derives one first-party browser client | Your branded sign-in, your application, optional enterprise SSO and inbound SCIM |
+| **An identity provider for multiple applications** | `ConfigureApplication(...)` describes the host; explicit clients describe each relying party | Several applications sign in with your accounts through OIDC; partner applications can request consent |
 
-`builder.AddSqlOS<TContext>(…)` describes your application once. SqlOS derives every protocol consequence — routes, token validation, metadata documents, client registration, seeds — so `Program.cs` contains no `MapSqlOS`, `RequireSqlOSAccessToken`, `AddMcpServer`, or `MapMcp` calls.
+Both use the same users, sessions, organizations, FGA services, and dashboard. An API and an MCP endpoint are protected resources, not additional browser applications: one application can expose both.
+
+The hosting APIs below target the next release. Until it is published, run the [Notes sample from this branch](examples/SqlOS.OneCall.Api), which exercises browser sign-in, a protected API, and MCP together.
+
+## One application: sign in and call your API
+
+`builder.AddSqlOS<TContext>(...)` registers SqlOS and maps its auth endpoints and dashboard at startup. `UseSingleApplication` adds one first-party public PKCE client. Your browser client still starts the sign-in flow and handles the callback; the example below uses ASP.NET Core's OIDC handler for that work.
+
+### Add it to a project
+
+Use .NET 9, EF Core 9, and an accessible SQL Server or PostgreSQL database. The currently published package version is:
+
+```bash
+dotnet add package SqlOS --version 4.2.0
+dotnet add package Microsoft.AspNetCore.Authentication.OpenIdConnect --version 9.0.0
+```
+
+Optional packages for the MCP and custom-login examples:
+
+```bash
+dotnet add package SqlOS.Mcp --version 4.2.0
+npm install @sqlos/headless@4.2.0
+```
+
+This complete `Program.cs` puts the provider and its browser client in one process. Supply `ConnectionStrings:DefaultConnection` through user secrets or your deployment configuration, then run on `http://localhost:5050` in Development. Use an HTTPS origin in production.
 
 ```csharp
-builder.AddSqlOS<AppDbContext>(
-    db => db.UseSqlServer(connectionString), // or db.UseNpgsql(connectionString)
-    options => options.UseSingleApplication("Acme", app =>
+using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
+using SqlOS;
+using SqlOS.AuthServer.Extensions;
+using SqlOS.Extensions;
+
+var builder = WebApplication.CreateBuilder(args);
+const string origin = "http://localhost:5050";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Configure ConnectionStrings:DefaultConnection.");
+
+builder.AddSqlOS<AppDbContext>(db => db.UseSqlServer(connectionString), options =>
+    options.UseSingleApplication("Acme", app =>
     {
-        app.Origin = "https://acme.example.com";               // everything else derives from this
-        app.Api = "/api";                                      // bearer tokens for {Origin}/api required under /api
-        app.Mcp("/mcp", mcp => mcp.WithTools<AcmeTools>());    // SqlOS.Mcp: hosted, OAuth-protected MCP server
-        app.Brand(page => page.PrimaryColor = "#0f172a");      // hosted sign-in colors, logo, copy
-        // app.Headless("/auth/authorize");                    // ...or your own sign-in UI instead of the hosted pages
-        app.Authorization(fga => fga                           // your permission model, reconciled at startup
-            .ResourceType("project", "Project")
-            .Permission("PROJECT_READ", "Read projects", "project")
-            .Role("project_viewer", "Viewer").Can("PROJECT_READ"));
+        app.Origin = origin;
+        app.ClientId = "acme";
+        app.Api = "/api";
+        app.Brand(page =>
+        {
+            page.PageTitle = "Sign in to Acme";
+            page.PageSubtitle = "Your team, in one place.";
+            page.PrimaryColor = "#0f172a";
+        });
+    }));
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = "SqlOS";
+}).AddCookie(options =>
+{
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
+    options.SlidingExpiration = false;
+}).AddOpenIdConnect("SqlOS", options =>
+{
+    options.Authority = origin + "/sqlos/auth";
+    options.ClientId = "acme";
+    options.CallbackPath = "/auth/callback";
+    options.ResponseType = "code";
+    options.ResponseMode = "query";
+    options.UsePkce = true;
+    options.SaveTokens = true;
+    options.GetClaimsFromUserInfoEndpoint = true;
+    options.MapInboundClaims = false;
+    options.Scope.Clear();
+    options.Scope.Add("openid");
+    options.Scope.Add("profile");
+    options.Scope.Add("email");
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+    if (builder.Environment.IsDevelopment())
+    {
+        options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+        options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.NonceCookie.SameSite = SameSiteMode.Lax;
+        options.NonceCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    }
+});
+builder.Services.AddAuthorization();
+builder.Services.AddHttpClient("acme-api", client => client.BaseAddress = new Uri(origin));
+
+var app = builder.Build();
+app.UseRouting();
+app.UseAuthentication();
+app.UseSqlOSSurfaceProtection();
+app.UseAuthorization();
+
+app.MapGet("/login", () => Results.Challenge(
+    new AuthenticationProperties { RedirectUri = "/" }, ["SqlOS"]));
+app.MapGet("/", async (HttpContext http, IHttpClientFactory clients) =>
+{
+    if (http.User.Identity?.IsAuthenticated != true)
+        return Results.Content("<a href='/login'>Sign in or create an account</a>", "text/html");
+
+    // The backend calls the API using the access token saved in its encrypted HttpOnly cookie.
+    using var request = new HttpRequestMessage(HttpMethod.Get, "/api/me");
+    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await http.GetTokenAsync("access_token"));
+    using var response = await clients.CreateClient("acme-api").SendAsync(request);
+    return Results.Content(await response.Content.ReadAsStringAsync(), "application/json",
+        statusCode: (int)response.StatusCode);
+});
+app.MapGet("/api/me", (HttpContext http) => Results.Ok(new
+{
+    userId = http.GetSqlOSValidatedToken()!.UserId
+}));
+app.Run();
+
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
+    : SqlOSDbContext<AppDbContext>(options);
+```
+
+Open `/`, choose **Sign in or create an account**, and complete the hosted flow. The OIDC handler validates the callback, saves the application cookie, and returns you to `/`; the backend calls `/api/me` and displays your user ID. An anonymous `curl -i http://localhost:5050/api/me` gets `401`. A browser cookie by itself does not grant API access.
+
+The example keeps its cookie for ten minutes and does not refresh tokens automatically. Start a new sign-in through `/login` after expiry. The [runnable Notes application](examples/SqlOS.OneCall.Api) adds a UI, CSRF-protected writes and logout, shared API/MCP service code, and real-database integration tests.
+
+### What the application description controls
+
+| Option | Effect |
+| --- | --- |
+| `Origin` | Public origin used to derive the default issuer, callback and surface audiences. Configure the externally visible URL, not a container address. |
+| `Api = "/api"` | Protects the entire path prefix, including middleware branches and unmatched paths, with bearer validation for `{Origin}/api`. A sibling such as `/api-public` is outside it. |
+| `Mcp("/mcp", ...)` | Registers and maps a stateless Streamable HTTP MCP server, with a separate `{Origin}/mcp` audience and OAuth discovery. Requires `SqlOS.Mcp`. |
+| `Brand(...)` | Reconciles hosted sign-in branding into code-owned settings. Equivalent to `AuthServer.SeedAuthPage`. |
+| `Authorization(...)` | Reconciles resource types, permissions, and roles. Equivalent to `Fga.Seed`; application services must still create grants and enforce access. |
+| `Headless("/auth/authorize")` | Sends browser interaction to your UI at `{Origin}/auth/authorize`; SqlOS continues to own the authentication protocol. You must implement that UI. |
+| `ClientId`, `RedirectPath`, `RedirectUris` | Identify the derived client and its allowed HTTP(S) callbacks. The default callback is `/auth/callback`; it must match your OIDC handler. |
+| `AllowedScopes` | The derived client's scope allowlist and advertised resource scopes. This does not grant a user any FGA permission. |
+| `EnablePasswordSignup`, `EnabledCredentialTypes` | Configure which sign-in/signup options appear. Enabling email or phone flows also requires their delivery configuration. |
+
+SqlOS creates and upgrades its own tables at startup. Your EF migrations own your application's tables. The dashboard at `/sqlos` is available without login only in Development by default; outside Development it returns `404` until you configure operator access. For password-protected access, assign `options.Dashboard.AuthMode = SqlOSDashboardAuthMode.Password` and resolve `options.Dashboard.Password` from your secret store. See [dashboard configuration](https://sqlos.dev/docs/reference/hosting-api).
+
+### API protection and middleware ordering
+
+Each request under a declared surface validates signature, issuer, expiry, audience, and SqlOS session state before protected handlers execute. API and MCP tokens are not interchangeable. The challenge's `resource_metadata` URL points to `/.well-known/oauth-protected-resource` for the API and `/.well-known/oauth-protected-resource/mcp` for MCP.
+
+A simple bearer-only host gets an automatic early guard. When your host registers ASP.NET authentication, use the explicit placement shown above; startup fails with guidance if it is missing. This lets cookie authentication run first and then establishes the surface's bearer identity for authorization policies and application middleware.
+
+For CORS, path rewriting, or exception handling, put those before the guard too: exception handling and rewriting → routing → CORS → authentication → `UseSqlOSSurfaceProtection()` → authorization → protected handlers. Put the guard in the root application before any branch that serves protected content. A configured CORS policy may answer a preflight; merely sending `OPTIONS` does not bypass protection. If you use `UsePathBase`, configure surface paths relative to that base (for example `Api = "/api"`), and place the guard after `UsePathBase`; it protects both mounted and unmounted routes. The base does not change the configured audience. Policies within a surface should use the current principal, rather than selecting a different authentication scheme.
+
+Additional scope requirements are explicit and retain the same audience:
+
+```csharp
+app.MapGroup("/api/admin")
+    .RequireSqlOSAccessToken(options =>
+    {
+        options.ExpectedAudience = origin + "/api";
+        options.RequiredScopes = ["acme.admin"];
+    })
+    .MapPost("/reindex", () => Results.Accepted());
+```
+
+Add `acme.admin` to the client allowlist before requesting it. A valid token without that scope receives `403`; the application must also check who may perform the operation.
+
+## MCP and authorization: the same Notes service
+
+The [Notes sample](examples/SqlOS.OneCall.Api) is a complete version of this setup. Each user gets a personal notebook on first use. Both HTTP handlers and MCP tools call `NotesService`, which checks the same permissions before reading or writing.
+
+### `app.Mcp(...)`: register tools and protect the server
+
+Add the `SqlOS.Mcp` package, then describe the surfaces and permission vocabulary together. This is the registration used with the sample's `NotesDbContext`, `NotesService`, and `NotesMcpTools`:
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using SqlOS.Extensions;
+using SqlOS.Mcp;
+using SqlOS.OneCall.Api;
+
+builder.Services.AddScoped<NotesService>();
+builder.AddSqlOS<NotesDbContext>(db => db.UseSqlServer(connectionString), options =>
+    options.UseSingleApplication("Notes", app =>
+    {
+        app.Origin = "http://localhost:5085";
+        app.ClientId = "notes";
+        app.Api = "/api";
+        app.Mcp("/mcp", mcp => mcp.WithTools<NotesMcpTools>());
+        app.Authorization(fga => fga
+            .ResourceType("notebook", "Notebook")
+            .Permission("NOTES_READ", "Read notes", "notebook")
+            .Permission("NOTES_WRITE", "Write notes", "notebook")
+            .Role("notebook_owner", "Notebook owner").Can("NOTES_READ", "NOTES_WRITE"));
     }));
 ```
 
-That is a working auth server with hosted login at `/sqlos/auth/login`, a dashboard at `/sqlos`, a token-protected API under `/api`, and an OAuth-protected MCP server at `/mcp` that Codex, ChatGPT, Claude, and Cursor can connect to.
-
-### Every option you need, on one screen
-
-Inside `UseSingleApplication("Name", app => …)`:
-
-| Option | Default | What SqlOS does with it |
-| --- | --- | --- |
-| `app.Origin` | required | Public origin of your app. Issuer (`{Origin}/sqlos/auth`), redirect URI (`{Origin}/auth/callback`), and audiences derive from it. |
-| `app.Api = "/api"` | off | Requires a bearer token for the audience `{Origin}/api` on every request under `/api` (401 + `WWW-Authenticate` otherwise) and serves `/.well-known/oauth-protected-resource`. Handlers read the user with `http.GetSqlOSValidatedToken()`. |
-| `app.Mcp("/mcp", mcp => …)` | off | Hosts an MCP server at `/mcp` with the same token protection, a distinct audience, its own protected-resource document, and portable-client registration (CIMD + resource indicators) turned on. Needs the `SqlOS.Mcp` package; the lambda is the MCP SDK's `IMcpServerBuilder`. |
-| `app.Brand(page => …)` | `Sign in to {Name}` | Brands the hosted login, signup, OTP, MFA, and consent pages. Same options as `AuthServer.SeedAuthPage`. |
-| `app.Headless("/auth/authorize")` | hosted pages | Switches to **your** sign-in UI: SqlOS redirects browser interaction to `{Origin}/auth/authorize` with the standard `request`, `view`, `email`, `pendingToken`, `mfaToken`, … parameters that `@sqlos/headless` reads. Same as `AuthServer.UseHeadlessAuthPage`. |
-| `app.Authorization(fga => …)` | none | Declares resource types, permissions, and roles; reconciled idempotently at startup. Same as `Fga.Seed`. |
-| `app.AllowedScopes`, `ClientId`, `RedirectPath`, `EnablePasswordSignup`, `EnabledCredentialTypes` | sensible | Fine-tuning of the single first-party PKCE client that SqlOS seeds for you. |
-
-Outside the `app` block, two things matter on day one: `options.Dashboard.AuthMode` / `Password` (the admin dashboard defaults to development-only access) and the sign-in methods you turn on — passwords, email OTP, magic links, social login, SAML — which are `options.AuthServer` seeds or dashboard settings, not code changes.
-
-Each option below is shown three ways: how you write it, what it changes in the running app, and why you would reach for it.
-
-### `app.Origin` — the one required line
-
-```csharp
-app.Origin = "https://acme.example.com";
-```
-
-**What it does.** SqlOS derives the OAuth issuer (`https://acme.example.com/sqlos/auth`), the first-party client's redirect URI (`https://acme.example.com/auth/callback`), and every audience below from it. Startup fails if it is missing, relative, or carries a path or query.
-
-**Why.** One value keeps the issuer, callback, and audiences consistent. Almost every "invalid redirect" or "wrong audience" bug in OAuth setups comes from three copies of the same URL drifting apart.
-
-### `app.Api` — protect your REST surface
-
-```csharp
-app.Api = "/api";
-```
-
-```csharp
-var app = builder.Build();
-
-// Every route under /api is already protected. Read the caller from the validated token.
-app.MapGet("/api/projects", async (HttpContext http, AppDbContext db, ISqlOSFgaAuthService fga) =>
-{
-    var userId = http.GetSqlOSValidatedToken()!.UserId;
-    var filter = await fga.BuildFilterAsync<Project>(userId, "PROJECT_READ");   // SQL WHERE, see Authorization
-    return Results.Ok(await db.Projects.Where(filter).ToListAsync());
-});
-
-// Need a scope on top? Nest a group: it reuses the validated token and only adds scope enforcement.
-app.MapGroup("/api/admin")
-   .RequireSqlOSAccessToken(options => options.RequiredScopes = ["acme.admin"])
-   .MapPost("/reindex", () => Results.Accepted());
-```
-
-**What it does.** On every request whose path starts with `/api`, SqlOS validates the bearer token's signature, expiry, issuer, and audience `https://acme.example.com/api` before your handler runs; anything else gets `401` with `WWW-Authenticate: Bearer realm="Acme API", resource_metadata="https://acme.example.com/.well-known/oauth-protected-resource"` and your handler never executes. The RFC 9728 document at that URL tells clients which authorization server to use. The first-party client SqlOS seeds for your frontend is given that audience, so tokens it obtains work at `/api` without any client-side configuration. Tokens minted for `/mcp` (below) are rejected here, and vice versa. Startup fails if `/api` overlaps `/sqlos`, `/.well-known`, or the MCP path.
-
-**Why.** Your SPA, mobile app, or CLI signs in with SqlOS and calls your API with the token it got — no `AddJwtBearer` configuration, no authority/audience strings to keep in sync, no accidental unprotected route because someone forgot an attribute. Leave it off if the host only serves server-rendered pages with a cookie session.
-
-### `app.Mcp` — host an OAuth-protected MCP server
-
-```bash
-dotnet add package SqlOS.Mcp
-```
-
-```csharp
-using SqlOS.Mcp;
-
-app.Mcp("/mcp", mcp => mcp.WithTools<ProjectTools>());   // the lambda is the MCP SDK's IMcpServerBuilder, unchanged
-```
+Here is the entire tool class. It obtains the authenticated user from SqlOS and delegates to the application service:
 
 ```csharp
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using SqlOS.Mcp;
+using SqlOS.OneCall.Api;
 
-public sealed class ProjectTools
+public sealed class NotesMcpTools
 {
-    [McpServerTool(Name = "list_projects"), Description("Lists the projects the connecting user may read.")]
-    public static async Task<IReadOnlyList<string>> ListProjects(
-        ISqlOSMcpUserContext user,        // who the agent is acting as; scoped per call
-        AppDbContext db,
-        ISqlOSFgaAuthService fga,
-        CancellationToken ct)
-    {
-        var userId = user.UserId ?? throw new InvalidOperationException("This tool requires a user token.");
-        var filter = await fga.BuildFilterAsync<Project>(userId, "PROJECT_READ");
-        return await db.Projects.Where(filter).Select(p => p.Name).ToListAsync(ct);
-    }
+    [McpServerTool(Name = "list_notes"), Description("Lists the connecting user's notes.")]
+    public static async Task<IReadOnlyList<string>> ListNotes(
+        ISqlOSMcpUserContext user, NotesService notes, CancellationToken ct)
+        => (await notes.ListAsync(RequireUser(user), ct)).Select(note => note.Text).ToArray();
 
-    [McpServerTool(Name = "create_project"), Description("Creates a project owned by the connecting user.")]
-    public static async Task<string> CreateProject(
-        ISqlOSMcpUserContext user, AppDbContext db, [Description("Project name.")] string name, CancellationToken ct)
-    {
-        var userId = user.UserId ?? throw new InvalidOperationException("This tool requires a user token.");
-        var project = new Project { Id = Guid.NewGuid().ToString(), Name = name };
-        db.Projects.Add(project);
-        await db.ProvisionResourceWithIdAsync(project.Id, "project", name, cancellationToken: ct);
-        await db.GrantRoleAsync(userId, project.Id, "project_owner", ct);
-        await db.SaveChangesAsync(ct);
-        return project.Id;
-    }
+    [McpServerTool(Name = "add_note"), Description("Adds a note to the connecting user's notebook.")]
+    public static async Task<string> AddNote(
+        ISqlOSMcpUserContext user, NotesService notes,
+        [Description("The note text.")] string text, CancellationToken ct)
+        => (await notes.AddAsync(RequireUser(user), text, ct)).Id.ToString();
+
+    private static string RequireUser(ISqlOSMcpUserContext user)
+        => user.UserId ?? throw new InvalidOperationException("This tool requires a user token.");
 }
 ```
 
-**What it does.** SqlOS registers the MCP SDK server (`AddMcpServer().WithHttpTransport()`, stateless Streamable HTTP), maps it at `/mcp`, and protects the path exactly like `Api` but for the audience `https://acme.example.com/mcp`, with its own document at `/.well-known/oauth-protected-resource/mcp`. Declaring an MCP surface also turns on client ID metadata documents and resource indicators in the authorization server, which is what lets Codex, ChatGPT, Claude, and Cursor connect without you pre-registering each of them: the agent presents its own metadata URL as `client_id`, the user signs in on your (hosted or headless) pages, and the token it receives is bound to `/mcp` only. Inside a tool, `ISqlOSMcpUserContext` gives you the user, organization, client, and scopes SqlOS already validated. Every call is written to Audit Logs as `mcp.tool.called` with tool name, subject, client, and outcome — never arguments or tokens. Core SqlOS has no MCP SDK dependency; only this package does.
+**What changes:** SqlOS hosts these tools at `/mcp`, validates tokens for `http://localhost:5085/mcp`, publishes the protected-resource document, and enables client ID metadata documents (CIMD) plus resource indicators. Compatible clients can use their metadata URL as `client_id` and request the MCP resource. This does not enable dynamic client registration (DCR); clients needing DCR require [explicit compatibility configuration](https://sqlos.dev/docs/authserver/dynamic-client-registration). Internet-hosted clients also need an HTTPS endpoint they can reach.
 
-**Why.** Agents act *as your users*, through the same permission model and the same service code as your API, so an agent can never see rows the user couldn't. You write tools; you do not write OAuth discovery, token validation, dynamic client registration, or audit plumbing.
+Tool calls are audited with their name, subject, client, and outcome, without arguments or tokens. `ISqlOSMcpUserContext` exposes the validated user, organization, client, and scopes. Hosting a tool does **not** automatically authorize its database operations: the service below supplies that enforcement. Use this when agents should act through the same business rules as your UI and API.
 
-### `app.Brand` — make the hosted pages yours
+### `app.Authorization(...)`: vocabulary, grants, and enforcement
+
+The registration above creates one resource type, two permissions, and one flat role. It creates no notebooks and grants nobody access. The sample's full [Notes.cs](examples/SqlOS.OneCall.Api/Notes.cs) defines the EF entities and handles initial provisioning; the core read/write methods are:
+
+```csharp
+public async Task<IReadOnlyList<Note>> ListAsync(string userId, CancellationToken ct)
+{
+    var notebookId = await EnsureNotebookAsync(userId, NotesAuthorization.ReadPermission, ct);
+    return await db.Notes.Where(n => n.NotebookId == notebookId)
+        .OrderBy(n => n.CreatedAt).ToListAsync(ct);
+}
+
+public async Task<Note> AddAsync(string userId, string text, CancellationToken ct)
+{
+    if (string.IsNullOrWhiteSpace(text) || text.Trim().Length > 2000)
+        throw new ArgumentException("A note must contain between 1 and 2000 characters.", nameof(text));
+
+    var notebookId = await EnsureNotebookAsync(userId, NotesAuthorization.WritePermission, ct);
+    var note = new Note
+    {
+        Id = Guid.NewGuid(), NotebookId = notebookId,
+        Text = text.Trim(), CreatedAt = DateTime.UtcNow
+    };
+    db.Notes.Add(note);
+    await db.SaveChangesAsync(ct);
+    return note;
+}
+
+private async Task<string> EnsureNotebookAsync(string userId, string permission, CancellationToken ct)
+{
+    var notebookId = NotesAuthorization.NotebookId(userId);
+    await CreateNotebookIfMissingAsync(userId, notebookId, ct);
+    var access = await fga.CheckAccessAsync(userId, permission, notebookId);
+    return access.Allowed ? notebookId : throw new UnauthorizedAccessException("Notebook access denied.");
+}
+```
+
+Creation provisions the user subject, notebook resource, and owner grant **once**, in the same transaction as the application's unique notebook row:
+
+```csharp
+private async Task CreateNotebookIfMissingAsync(string userId, string notebookId, CancellationToken ct)
+{
+    if (await db.Notebooks.AnyAsync(x => x.UserId == userId, ct)) return;
+
+    await using var transaction = await db.Database.BeginTransactionAsync(ct);
+    db.Notebooks.Add(new Notebook { UserId = userId });
+    try
+    {
+        // The unique user key reserves creation across requests and replicas. Another creator
+        // waits for this transaction; it can only observe a notebook whose grant also committed.
+        await db.SaveChangesAsync(ct);
+    }
+    catch (DbUpdateException)
+    {
+        await transaction.RollbackAsync(ct);
+        await transaction.DisposeAsync();
+        db.ChangeTracker.Clear();
+        if (!await db.Notebooks.AnyAsync(x => x.UserId == userId, ct)) throw;
+        return;
+    }
+
+    await db.ProvisionUserSubjectAsync(userId, userId, cancellationToken: ct);
+    await db.ProvisionResourceWithIdAsync(notebookId, NotesAuthorization.NotebookType, $"Notebook of {userId}", cancellationToken: ct);
+    await db.GrantRoleAsync(userId, notebookId, NotesAuthorization.OwnerRole, ct);
+    await db.SaveChangesAsync(ct);
+    await transaction.CommitAsync(ct);
+}
+```
+
+The unique notebook row prevents concurrent first requests from creating duplicate grants. Later requests only check permissions: removing `notebook_owner` in the dashboard or through the grant API makes both API reads/writes and MCP calls fail. Repeated calls do not restore it. Restoring the role is an explicit administrative action. Alice and Bob have separate resources, so neither can read the other's notebook.
+
+**Why use this:** keep the authorization model reproducible in code while memberships, resources, and grants remain runtime data. For a workspace/project hierarchy, attach projects to their workspace resource and grant at the workspace to inherit access below it. For lists spanning many resources, use `BuildFilterAsync<T>` on entities implementing `IHasResourceId` to filter in SQL; see the [complete EF authorization example](https://sqlos.dev/docs/quickstarts/ef-authorization).
+
+Startup reconciliation uses stable keys and explicit configuration ownership. Code-owned definitions are visible in the dashboard; operator-owned definitions are not silently taken over. Renaming a display label keeps its identity; changing a key is a model migration. See the [authorization guide](https://sqlos.dev/docs/quickstarts/ef-authorization) for model and grant management.
+
+## `app.Brand(...)`: hosted pages and ownership
+
+Use this inside either application description:
 
 ```csharp
 app.Brand(page =>
 {
-    page.PageTitle = "Acme";                                   // default: "Sign in to Acme"
+    page.PageTitle = "Welcome to Acme";
     page.PageSubtitle = "Sign in to your workspace.";
-    page.LogoBase64 = Convert.ToBase64String(File.ReadAllBytes("wwwroot/logo.png"));
     page.PrimaryColor = "#0f172a";
     page.AccentColor = "#2563eb";
     page.BackgroundColor = "#f8fafc";
-    page.Layout = "split";                                     // or "stacked"
+    page.Layout = "stacked"; // "split" is the other layout
+    page.EnablePasswordSignup = false;
+    page.EnabledCredentialTypes = ["password"];
 });
 ```
 
-**What it does.** At startup SqlOS writes these values into its AuthPage settings record and marks it code-owned. Every hosted screen — login, signup, email/phone OTP, magic-link landing, MFA challenge and enrollment, organization picker, invitation acceptance, consent — renders with them, and the built-in OTP, invitation, and password-reset emails carry the application name. The dashboard shows the branding as code-owned and read-only, pointing operators back to source control so a click can never silently diverge from your repo. `EnablePasswordSignup` and `EnabledCredentialTypes` on `app` itself decide which credential options appear (`"password"`, `"email_otp"`, `"magic_link"`, `"phone_otp"`).
+**What changes:** hosted sign-in screens use these colors, layout, and copy; this example removes self-service password signup while allowing existing users to sign in. It neither creates users nor configures an SSO connection. Add `page.LogoBase64` with an image data URL such as `data:image/png;base64,...`. The settings are reconciled at startup and marked code-owned, so the dashboard shows their source and prevents conflicting edits.
 
-**Why.** Users should never see a generic login page, and branding belongs in the same PR as the feature. If a non-developer should own the look instead, leave `Brand` out and edit in the dashboard; the record becomes dashboard-owned. Ownership is explicit in both directions: adding `Brand` later to a host whose branding was already edited in the dashboard fails startup with a clear message rather than overwriting the operator's work.
+The application preset seeds default auth-page and email branding even when you omit `Brand`. `Brand` customizes the auth pages; it does not copy its colors into emails. Customize email visuals separately with `options.AuthServer.SeedAuthEmails(...)`.
 
-### `app.Headless` — or bring your own sign-in UI
-
-```csharp
-app.Headless("/auth/authorize");   // your page at https://acme.example.com/auth/authorize
-```
-
-```bash
-npm install @sqlos/headless
-```
-
-```ts
-// In your frontend page at /auth/authorize
-import { createHeadlessFlow } from "@sqlos/headless";
-
-const flow = createHeadlessFlow({
-  issuer: "https://acme.example.com/sqlos/auth",
-  clientId: "acme",                                      // app.ClientId (default: slug of the name)
-  redirectUri: "https://acme.example.com/auth/callback", // {Origin}{RedirectPath}
-  credentials: "include",
-});
-
-await flow.resume(window.location);                      // reads ?request=…&view=… that SqlOS appended
-
-// Render flow.viewModel.view (login | signup | otp | mfa | organization | consent …), collect input, call one action:
-await flow.identify({ email });
-await flow.password.login({ password });
-
-if (flow.status === "redirect" && flow.redirectUrl) {
-  window.location.assign(flow.redirectUrl);              // back to your OAuth callback with an authorization code
-}
-```
-
-**What it does.** With `BuildUiUrl` present, `/sqlos/auth/authorize` stops rendering the hosted pages and instead redirects the browser to `{Origin}/auth/authorize?request=…&view=…` plus `error`, `email`, `displayName`, `pendingToken`, `mfaToken`, `consentToken`, and `ui_context` when they apply. Your page drives the flow through the JSON headless API at `/sqlos/auth/headless`, which returns the current view and accepts each step; SqlOS still owns the saved authorization request, PKCE, credential verification, home-realm discovery, SSO callbacks, organization selection, MFA policy, sessions, and token issuance. `app.Brand(...)` still applies — the view model exposes it so your UI can reuse the palette and copy. For a UI on another origin, or a different query shape, use `app.Headless(headless => headless.BuildUiUrl = ctx => …)`.
-
-**Why.** Choose it when the sign-in screens must match your design system, collect product-specific signup fields, or be A/B tested. It is one line to switch and one line to switch back; nothing else in `Program.cs` changes. Start hosted unless the UI is already a requirement.
-
-### `app.Authorization` — declare your permission model
+**Why use it:** deploy the same sign-in experience with your application in each environment. For a new host where operators should own branding instead, disable both automatic seeds and omit `Brand`:
 
 ```csharp
-app.Authorization(fga => fga
-    .ResourceType("workspace", "Workspace")
-    .ResourceType("project", "Project")                                         // projects live under workspaces
-    .Permission("PROJECT_READ", "Read projects", "project")
-    .Permission("PROJECT_WRITE", "Edit projects", "project")
-    .Permission("WORKSPACE_ADMIN", "Administer workspace", "workspace")
-    .Role("project_viewer", "Viewer").Can("PROJECT_READ")
-    .Role("project_owner", "Owner").Can("PROJECT_READ", "PROJECT_WRITE")
-    .Role("workspace_admin", "Workspace admin").Can("WORKSPACE_ADMIN", "PROJECT_READ", "PROJECT_WRITE"));
+app.ConfigureAuthPageBranding = false;
+app.ConfigureEmailBranding = false;
 ```
 
-```csharp
-// Your entities carry the FGA resource id...
-public sealed class Project : IHasResourceId
-{
-    public string Id { get; set; } = "";
-    public string ResourceId => Id;
-    public string Name { get; set; } = "";
-}
+Operators can then configure branding in the dashboard. Removing an existing seed does not silently transfer ownership: it marks the code-owned configuration orphaned, and the next authorized dashboard save can explicitly claim the orphaned settings. Adding a seed over dashboard-owned settings fails rather than overwriting them.
 
-// ...you grant at runtime when things are created...
-await db.ProvisionResourceWithIdAsync(workspace.Id, "workspace", workspace.Name);
-await db.ProvisionResourceWithIdAsync(project.Id, "project", project.Name, parentResourceId: workspace.Id);
-await db.GrantRoleAsync(adminUserId, workspace.Id, "workspace_admin");    // inherited by every project below
+For custom-rendered screens, `app.Headless("/auth/authorize")` redirects interaction to your UI; implement it with [`@sqlos/headless`](https://sqlos.dev/docs/guides/custom-login-ui). SqlOS still handles credentials, SSO, MFA, consent, sessions, and token issuance. `Brand` remains available through the headless view model.
 
-// ...and check or filter in SQL when you read.
-var allowed = await fga.CheckAccessAsync(userId, "PROJECT_WRITE", project.Id);
-var filter  = await fga.BuildFilterAsync<Project>(userId, "PROJECT_READ");
-var visible = await db.Projects.Where(filter).ToListAsync();               // only rows the user may read
-```
+## Multiple applications: SqlOS as your identity provider
 
-**What it does.** At startup SqlOS reconciles the resource types, permissions, and roles into its FGA tables — idempotently, so redeploys are no-ops and renames are updates, not duplicates — and marks them code-owned in the dashboard. Grants (who has which role on which resource) are runtime data you create as your app creates workspaces and projects; a grant on a parent applies to every descendant. `CheckAccessAsync` answers one question; `BuildFilterAsync` returns an EF expression that compiles to a `WHERE` clause over the grant tables, so list endpoints never load rows the user cannot see. Groups, service accounts, and agents are subjects too, and SCIM or organization memberships can feed grants automatically.
+Use this shape when multiple products or partners need to sign in with your accounts. **Downstream OIDC is supported**: SqlOS issues ID tokens and exposes UserInfo to the applications. Upstream social/enterprise OIDC connections are a separate capability: those let users sign in to SqlOS with another provider.
 
-**Why.** Role checks stop scaling the moment a customer asks "can Sam see only the Berlin projects?". Declaring the model here keeps roles and permissions in source control, reviewable and identical across environments, while the runtime data lives next to your rows in SQL — no policy service, no post-filtering in memory. Leave it off until you have per-resource rules; SqlOS's organizations and memberships cover the coarse cases.
+### Complete identity-provider host
 
-### Fine-tuning the client SqlOS seeds for you
-
-```csharp
-app.ClientId = "acme-web";                       // default: slug of the name ("acme")
-app.RedirectPath = "/signin-sqlos";              // default: /auth/callback; must match your OIDC handler's CallbackPath
-app.RedirectUris.Add("acme://auth/callback");    // extra absolute URIs, e.g. a mobile app
-app.AllowedScopes = ["openid", "profile", "email", "offline_access", "acme.admin"];
-app.EnablePasswordSignup = false;                // invite-only or SSO-only products
-app.EnabledCredentialTypes = ["password", "email_otp"];
-```
-
-**What it does.** These shape the single first-party `public_pkce` client record SqlOS seeds (PKCE required, S256 only, no consent screen). `AllowedScopes` is the allowlist a token request may draw from — add your own scopes here before enforcing them with `RequiredScopes`. `EnabledCredentialTypes` and `EnablePasswordSignup` decide which options the sign-in pages offer. Changing `Origin` or `RedirectPath` re-seeds the redirect URI on the next start.
-
-**Why.** The defaults are right for a web app on one origin. You touch these when a mobile app, an OIDC middleware with its own callback path, custom scopes, or an invite-only signup policy enters the picture.
-
-### Outside the `app` block: the dashboard and sign-in methods
-
-```csharp
-options.Dashboard.AuthMode = SqlOSDashboardAuthMode.Password;
-options.Dashboard.Password = builder.Configuration["SqlOS:Dashboard:Password"]!;   // from user secrets or your vault
-
-options.AuthServer.SeedGoogleConnection(googleClientId, googleClientSecret, "https://acme.example.com/sqlos/auth/oidc/callback");
-options.AuthServer.SeedMfaPolicy(mfa => mfa.RequireForOwnersAndAdmins = true);
-```
-
-**What it does.** `Dashboard` gates `/sqlos` and the admin APIs. The default, `DevelopmentOnly`, opens them without a password while `ASPNETCORE_ENVIRONMENT` is `Development` and returns `404` for them anywhere else — so a host deployed without a password has no dashboard rather than an open one. `Password` mode (shown) is the baseline for real environments. Sign-in connections and MFA policy are seeds like everything above: reconciled at startup, code-owned, visible in the dashboard. Passwords, email OTP, magic links, SMS, Microsoft/GitHub/Apple/custom OIDC, SAML, and SCIM follow the same pattern.
-
-**Why.** Sign-in methods are configuration, not code. Seed them when they should ship with a deployment; use the dashboard when operators or customer admins own them (for example a customer's SAML connection).
-
-### Add it to a project
-
-You'll need **.NET 9**, **EF Core 9**, and a **SQL Server or PostgreSQL** database your application can reach.
-
-```bash
-dotnet add package SqlOS --version 4.2.0
-dotnet add package SqlOS.Mcp --version 4.2.0   # only if you host an MCP server
-npm install @sqlos/headless@4.2.0              # only if you build your own login UI
-```
-
-Derive your `DbContext` from `SqlOSDbContext<TContext>` so SqlOS can register its EF Core model, then declare your application:
+This host serves two downstream applications, retains a protected local API, and enables inbound SCIM. Configure the database, dashboard password, and partner client secret through the host's secret mechanism. The partner receives the same client secret through a secure setup process; it is never embedded in a browser application.
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
@@ -280,89 +360,157 @@ using SqlOS.Configuration;
 using SqlOS.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
-
+const string origin = "https://id.acme.example.com";
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException(
-        "Connection string 'DefaultConnection' was not configured.");
-
-const string appOrigin = "http://localhost:5050";
+    ?? throw new InvalidOperationException("Configure ConnectionStrings:DefaultConnection.");
 var dashboardPassword = builder.Configuration["SqlOS:Dashboard:Password"]
-    ?? throw new InvalidOperationException(
-        "Configure SqlOS:Dashboard:Password with user secrets or your secret store.");
+    ?? throw new InvalidOperationException("Configure SqlOS:Dashboard:Password.");
+var partnerSecret = builder.Configuration["SqlOS:PartnerClientSecret"]
+    ?? throw new InvalidOperationException("Configure SqlOS:PartnerClientSecret.");
 
-builder.AddSqlOS<AppDbContext>(
-    db => db.UseSqlServer(connectionString), // or db.UseNpgsql(connectionString)
-    options =>
+builder.AddSqlOS<AppDbContext>(db => db.UseSqlServer(connectionString), options =>
+{
+    options.ConfigureApplication("Acme Identity", app =>
     {
-        options.UseSingleApplication("Acme", app =>
+        app.Origin = origin;
+        app.Api = "/api";
+        app.Brand(page =>
         {
-            app.Origin = appOrigin;
-            app.Api = "/api";
-            app.Brand(page => page.PrimaryColor = "#0f172a");
-            // app.Headless("/auth/authorize");                       // your own sign-in UI instead
-            // app.Mcp("/mcp", mcp => mcp.WithTools<AcmeTools>());    // SqlOS.Mcp package
-            app.Authorization(fga => fga
-                .ResourceType("project", "Project")
-                .Permission("PROJECT_READ", "Read projects", "project")
-                .Role("project_viewer", "Viewer").Can("PROJECT_READ"));
+            page.PageTitle = "Sign in with Acme";
+            page.PrimaryColor = "#0f172a";
         });
-
-        options.Dashboard.AuthMode = SqlOSDashboardAuthMode.Password;
-        options.Dashboard.Password = dashboardPassword;
     });
+    options.AuthServer.PublicOrigin = origin;
+    options.AuthServer.Issuer = origin + "/sqlos/auth";
+    options.AuthServer.ConfigureOpenIdProvider(oidc =>
+    {
+        oidc.Enabled = true;
+        oidc.PublishDiscoveryDocument = true;
+        oidc.EnableUserInfoEndpoint = true;
+    });
+    options.AuthServer.EnableScim = true;
+    options.Dashboard.AuthMode = SqlOSDashboardAuthMode.Password;
+    options.Dashboard.Password = dashboardPassword;
+
+    options.AuthServer.SeedClient(client =>
+    {
+        client.ClientId = "acme-web";
+        client.Name = "Acme Web";
+        client.ClientType = "public_pkce";
+        client.IsFirstParty = true;
+        client.RequirePkce = true;
+        client.Audience = origin + "/api";
+        client.RedirectUris = ["https://app.acme.example.com/auth/callback"];
+        client.AllowedScopes = ["openid", "profile", "email"];
+    });
+    options.AuthServer.SeedClient(client =>
+    {
+        client.ClientId = "partner-portal";
+        client.Name = "Partner Portal";
+        client.ClientType = "confidential";
+        client.TokenEndpointAuthMethod = "client_secret_post";
+        client.ClientSecretResolver = () => partnerSecret;
+        client.IsFirstParty = false;
+        client.RequirePkce = true;
+        client.Audience = "partner-portal";
+        client.RedirectUris = ["https://portal.partner.example/auth/callback"];
+        client.AllowedScopes = ["openid", "profile", "email"];
+    });
+});
 
 var app = builder.Build();
-
-app.MapGet("/", () => "SqlOS is running");
-app.MapGet("/api/me", (HttpContext http) => http.GetSqlOSValidatedToken()!.UserId); // already protected
-
+app.MapGet("/api/me", (HttpContext http) => Results.Ok(new
+{
+    userId = http.GetSqlOSValidatedToken()!.UserId
+}));
 app.Run();
 
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
-    : SqlOSDbContext<AppDbContext>(options)
-{
-}
+    : SqlOSDbContext<AppDbContext>(options);
 ```
 
-Run it on the origin you declared (`dotnet run --urls http://localhost:5050`) and you have:
+`ConfigureApplication` keeps the same `Api`, `Mcp`, `Brand`, `Headless`, and `Authorization` options but seeds **no client**. Each explicit client has its own redirect allowlist, scopes, audience, and consent behavior. Acme Web can call this host's API. The partner's token cannot: its audience is `partner-portal`. First-party status skips consent; it does not bypass application access policy or FGA.
 
-| What | Where |
-| --- | --- |
-| Admin dashboard | `http://localhost:5050/sqlos` |
-| Hosted login | `http://localhost:5050/sqlos/auth/login` |
-| OAuth / OIDC metadata | `http://localhost:5050/sqlos/auth/.well-known/oauth-authorization-server` |
-| Protected-resource metadata | `http://localhost:5050/.well-known/oauth-protected-resource` |
-| Your API | `http://localhost:5050/api/…` — 401 without a token for `http://localhost:5050/api` |
+The issuer is `https://id.acme.example.com/sqlos/auth`; OIDC discovery is at `https://id.acme.example.com/sqlos/auth/.well-known/openid-configuration`. Code-owned clients reconcile on startup. Dashboard/API-created clients can coexist under different IDs, using the same domain validation and audit behavior. Use [application access policies](https://sqlos.dev/docs/authserver/application-access) to restrict which organizations and principals may sign in to each application.
 
-SqlOS creates and upgrades its own tables at startup — your EF migrations keep owning only your application's tables. Signing-key protection is configured automatically. **SQL Server or PostgreSQL — you choose.** Switch `UseSqlServer` for `UseNpgsql` and SqlOS loads the matching schema, locks, and FGA functions; there is no second package or dashboard toggle.
+### Complete downstream OIDC application
 
-Runnable version: [`examples/SqlOS.OneCall.Api`](examples/SqlOS.OneCall.Api). Docs: [Getting started](https://sqlos.dev/docs/getting-started) · [Single application](https://sqlos.dev/docs/authserver/single-application) · [Protect an API](https://sqlos.dev/docs/quickstarts/protect-api) · [Host an MCP server](https://sqlos.dev/docs/authserver/mcp-server) · [Sign in from ASP.NET Core](https://sqlos.dev/docs/quickstarts/aspnet-core-login)
-
-## Second shape: many applications (identity provider)
-
-When other applications should sign in with your accounts — a separate SPA and API, partner apps, CLIs, or "Sign in with Acme" — the same host becomes an identity provider. Drop `UseSingleApplication` and declare each client explicitly:
+This is `Program.cs` in the **partner portal**, a separate ASP.NET Core web application with the `Microsoft.AspNetCore.Authentication.OpenIdConnect` package. Deploy it at the registered HTTPS origin and configure its copy of the client secret:
 
 ```csharp
-builder.AddSqlOS<AppDbContext>(
-    db => db.UseSqlServer(connectionString),
-    options =>
-    {
-        options.AuthServer.PublicOrigin = "https://id.acme.example.com";
-        options.AuthServer.Issuer = "https://id.acme.example.com/sqlos/auth";
-        options.AuthServer.SeedClient(client =>
-        {
-            client.ClientId = "acme-web";
-            client.Name = "Acme Web";
-            client.ClientType = "public_pkce";
-            client.RedirectUris = ["https://app.acme.example.com/auth/callback"];
-            client.AllowedScopes = ["openid", "profile", "email", "offline_access"];
-            client.IsFirstParty = true;
-        });
-        options.AuthServer.SeedClient(client => { client.ClientId = "partner-portal"; /* third party: consent, audience, scopes */ });
-    });
+using Microsoft.AspNetCore.Authentication.Cookies;
+
+var builder = WebApplication.CreateBuilder(args);
+var clientSecret = builder.Configuration["Authentication:SqlOS:ClientSecret"]
+    ?? throw new InvalidOperationException("Configure Authentication:SqlOS:ClientSecret.");
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = "SqlOS";
+}).AddCookie().AddOpenIdConnect("SqlOS", options =>
+{
+    options.Authority = "https://id.acme.example.com/sqlos/auth";
+    options.ClientId = "partner-portal";
+    options.ClientSecret = clientSecret;
+    options.CallbackPath = "/auth/callback";
+    options.ResponseType = "code";
+    options.UsePkce = true;
+    options.GetClaimsFromUserInfoEndpoint = true;
+    options.MapInboundClaims = false;
+    options.TokenValidationParameters.NameClaimType = "name";
+    options.Scope.Clear();
+    options.Scope.Add("openid");
+    options.Scope.Add("profile");
+    options.Scope.Add("email");
+});
+builder.Services.AddAuthorization();
+
+var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapGet("/", (HttpContext http) => Results.Ok(new
+{
+    name = http.User.Identity!.Name,
+    email = http.User.FindFirst("email")?.Value
+})).RequireAuthorization();
+app.Run();
 ```
 
-Everything from the standard flow still applies (hosted or headless login, branding, FGA, dashboard); you additionally get per-client consent, audiences, [Sign in with X](https://sqlos.dev/docs/guides/sign-in-with-x), [CLI device flow](https://sqlos.dev/docs/guides/terminal-auth), [machine clients](https://sqlos.dev/docs/authserver/machine-clients), and portable-client registration ([CIMD](https://sqlos.dev/docs/authserver/client-id-metadata-documents) / [DCR](https://sqlos.dev/docs/authserver/dynamic-client-registration)). Clients can also be created from the dashboard or admin API — all three control planes share one validation and audit path. → [Multiple applications](https://sqlos.dev/docs/authserver/multiple-applications) · [Clients](https://sqlos.dev/docs/authserver/clients)
+Visit the portal: it redirects to SqlOS, the user signs in and consents, then returns to `/auth/callback`. The handler validates the ID token, fetches the requested profile claims from UserInfo, and establishes the portal's own cookie. This is the outbound OIDC identity-provider use case; no SqlOS database or package is required in the relying party. A complete [Sign in with X guide](https://sqlos.dev/docs/guides/sign-in-with-x) also demonstrates a Next.js relying party.
+
+### SCIM: provision into SqlOS
+
+The host above enables the **SCIM 2.0 server** at `/sqlos/scim/v2`. An upstream directory such as Entra or Okta sends users and groups into one SqlOS organization:
+
+1. Create or select the organization in the SqlOS dashboard.
+2. Open its SCIM configuration and create an enabled connection. Copy the returned SCIM base URL and one-time bearer token into the upstream provider's provisioning configuration. SqlOS stores only the token hash.
+3. Test provisioning a user and group from that provider. Inspect sync outcomes in SqlOS, then configure group mappings to application roles or FGA roles on chosen resources.
+4. Disable a provisioned user or remove a group membership upstream and synchronize again; inspect the resulting user/membership and managed-grant changes. Keep SSO and each application's access policy configured separately.
+
+For trusted server-side administration, the same creation operation is available through `SqlOSAdminService` after startup:
+
+```csharp
+using SqlOS.AuthServer.Contracts;
+using SqlOS.AuthServer.Services;
+
+await using var scope = app.Services.CreateAsyncScope();
+var admin = scope.ServiceProvider.GetRequiredService<SqlOSAdminService>();
+var connection = await admin.CreateScimConnectionAsync(
+    new SqlOSCreateScimConnectionRequest(organizationId, "Acme directory"));
+// Hand connection.BaseUrl and connection.Token to the authorized operator once.
+// Do not log or persist the raw token; rotation creates a replacement.
+```
+
+Run this as an explicit setup operation for an existing organization, not on every restart. The dashboard uses the same administration service and validation. A bearer token is scoped to its connection's organization; enabling SCIM globally does not create a connection or grant applications access.
+
+**Outbound SCIM provisioning is not implemented.** SqlOS can be the central OIDC provider for your applications and receive enterprise-directory provisioning, but it does not push accounts to downstream SaaS services over SCIM. That requires a separate provisioning integration. See [SCIM directory sync](https://sqlos.dev/docs/authserver/scim-directory-sync) for connection lifecycle, rotation, group mapping, and protocol examples.
+
+### Growing an existing single application
+
+Replace `UseSingleApplication` with `ConfigureApplication`, keeping the same host block, API/MCP paths, issuer, origin, branding, and permission keys. Remove the single-client-only properties from that block and explicitly seed the existing client with its **same client ID, audience, redirect URIs, scopes, PKCE, and first-party settings**. Then add the second client.
+
+Do not combine `UseSingleApplication` with explicit startup client seeds; startup rejects the ambiguous ownership. Changing the hosting mode alone does not require a new issuer, database, API implementation, or MCP tools. Moving to another domain is a separate migration because it changes issuer and audience values. See [multiple applications](https://sqlos.dev/docs/authserver/multiple-applications) for the complete migration example.
 
 ## What's in the box
 

@@ -40,7 +40,8 @@ internal sealed class SingleApplicationTestHost : IAsyncDisposable
     public static async Task<SingleApplicationTestHost> StartAsync(
         Action<SqlOSOptions> configure,
         Action<WebApplication>? configureApp = null,
-        string environment = "Development")
+        string environment = "Development",
+        Action<IServiceCollection>? configureServices = null)
     {
         var databaseName = $"single-app-host-{Guid.NewGuid():N}";
         var logs = new RecordingLoggerProvider();
@@ -53,6 +54,7 @@ internal sealed class SingleApplicationTestHost : IAsyncDisposable
         // Bootstrap (schema/seed) needs a relational provider; tests seed rows directly instead.
         builder.Services.RemoveAll<IHostedService>();
 
+        configureServices?.Invoke(builder.Services);
         var app = builder.Build();
         configureApp?.Invoke(app);
         await app.StartAsync();
