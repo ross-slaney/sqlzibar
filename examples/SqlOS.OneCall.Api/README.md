@@ -28,7 +28,7 @@ The launch profile uses Development and `http://localhost:5085`. Use `Notes:Orig
 3. Connect a compatible MCP client to `http://localhost:5085/mcp`, sign in as the same user, and call `list_notes`. Call `add_note` and refresh the browser to see it. Internet-hosted clients need a publicly reachable HTTPS deployment. See [MCP client setup](https://sqlos.dev/docs/authserver/mcp-server).
 4. Sign in as another user in a separate browser session. That user gets a different notebook and cannot read the first user's notes.
 5. In the dashboard's FGA grants view, remove the first user's `notebook_owner` grant. Their browser/API reads and writes now fail, and both MCP tools return errors. Ordinary requests do not restore the grant. Explicitly restore it to grant access again.
-6. Use **Sign out**. The sample revokes the browser's SqlOS session using its refresh token and clears the application cookie. Other independently authenticated MCP sessions remain separate.
+6. Use **Sign out**. The sample revokes the browser client's OAuth session using its refresh token, clears the application cookie, and navigates through SqlOS logout to end the issuer session too. The next sign-in shows the login form. Other independently authenticated MCP sessions remain separate.
 
 The cookie lasts ten minutes, without automatic token refresh. Sign in again when it expires or the API rejects the saved token. This keeps the sample's session lifecycle explicit; use the [sessions guide](https://sqlos.dev/docs/authserver/sessions-and-tokens) when adding renewal.
 

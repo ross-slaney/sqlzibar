@@ -43,6 +43,10 @@ public sealed class NotesJourneyIntegrationTests
         home.Should().Contain("New note");
         (await browser.PostAsync("/notes", new FormUrlEncodedContent(new Dictionary<string, string>
         {
+            ["text"] = "forged"
+        }))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await browser.PostAsync("/notes", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
             ["text"] = "Alice's <private> note",
             ["__RequestVerificationToken"] = Input(home, "__RequestVerificationToken")
         }))).StatusCode.Should().Be(HttpStatusCode.Redirect);
@@ -86,15 +90,24 @@ public sealed class NotesJourneyIntegrationTests
         (await host.Api(HttpMethod.Get, aliceApi)).StatusCode.Should().Be(HttpStatusCode.OK);
         (await aliceTools.CallToolAsync("list_notes", new Dictionary<string, object?>())).IsError.Should().NotBe(true);
         home = await browser.GetStringAsync("/");
-        (await browser.PostAsync("/logout", new FormUrlEncodedContent(new Dictionary<string, string>
+        (await browser.PostAsync("/logout", new FormUrlEncodedContent(new Dictionary<string, string>())))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var logout = await browser.PostAsync("/logout", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["__RequestVerificationToken"] = Input(home, "__RequestVerificationToken")
-        }))).StatusCode.Should().Be(HttpStatusCode.Redirect);
+        }));
+        logout.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        await browser.GetAsync(logout.Headers.Location);
         (await browser.GetStringAsync("/")).Should().Contain("Sign in or create an account");
         await using var finalScope = host.App.Services.CreateAsyncScope();
         var finalDb = finalScope.ServiceProvider.GetRequiredService<NotesDbContext>();
         (await finalDb.Set<SqlOSSession>().CountAsync(x => x.UserId == alice.Id && x.RevokedAt != null)).Should().BeGreaterThan(0);
+        (await finalDb.Set<SqlOSIssuerSessionFamily>().CountAsync(x => x.UserId == alice.Id && x.RevokedAt != null)).Should().BeGreaterThan(0);
         (await finalDb.Set<SqlOSAuditEvent>().CountAsync(x => x.Action == "mcp.tool.called" && x.UserId == alice.Id)).Should().BeGreaterThanOrEqualTo(5);
+        var newLogin = await browser.GetAsync("/login");
+        var loginForm = await browser.GetAsync(newLogin.Headers.Location);
+        loginForm.StatusCode.Should().Be(HttpStatusCode.OK, "the issuer session must no longer silently sign the user in");
+        Input(await loginForm.Content.ReadAsStringAsync(), "requestId").Should().NotBeNullOrWhiteSpace();
     }
 
     [TestMethod]

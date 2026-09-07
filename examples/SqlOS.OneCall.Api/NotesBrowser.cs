@@ -56,11 +56,13 @@ internal static class NotesBrowser
             if (refreshToken != null)
             {
                 using var response = await clients.CreateClient("notes-api").PostAsJsonAsync("/sqlos/auth/logout",
-                    new { refreshToken, sessionId = http.User.FindFirst("sid")?.Value }, http.RequestAborted);
+                    new { refreshToken }, http.RequestAborted);
                 response.EnsureSuccessStatusCode();
             }
             await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return Results.Redirect("/");
+            // OAuth token revocation and issuer-session sign-out are separate operations.
+            // Navigate the browser so SqlOS can revoke its issuer session and clear that cookie.
+            return Results.Redirect("/sqlos/auth/logout?returnTo=/");
         }).RequireAuthorization();
     }
 
