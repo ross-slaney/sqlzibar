@@ -46,7 +46,7 @@ bool isMember = await adminService.UserHasMembershipAsync(userId, organizationId
 
 The check returns `true` only when the user, organization, and membership are all active. Organization selection excludes inactive organizations.
 
-An inactive membership is an offboarding state. SqlOS rejects organization-scoped authorization codes, refreshes, AuthPage reuse, SAML callbacks, and stateful access-token validation for that membership. SAML JIT provisioning can create a genuinely missing membership, but it does not reactivate an existing inactive membership; use an explicit invitation or trusted admin workflow to restore access.
+An inactive membership is an offboarding state. SqlOS rejects organization-scoped authorization codes, refreshes, issuer-session reuse, SAML callbacks, and stateful access-token validation for that membership. SAML JIT provisioning can create a genuinely missing membership, but it does not reactivate an existing inactive membership; use an explicit invitation or trusted admin workflow to restore access.
 
 ## List user organizations
 

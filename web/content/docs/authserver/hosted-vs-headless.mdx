@@ -83,6 +83,6 @@ Want your own UI? Use **headless**. Still let SqlOS own codes, tokens, and PKCE.
 
 ## Switching modes
 
-You can flip hosted ↔ headless. OAuth, tokens, sessions, OTP, magic links, invitations, CLI device flow, and refresh stay the same. Only the login UI changes.
+You can flip hosted ↔ headless. OAuth, tokens, sessions, OTP, magic links, invitations, CLI device flow, and refresh stay the same. Only the login UI changes. The [issuer session](/docs/authserver/sessions-and-tokens) (the `sqlos_auth_page` cookie that `/authorize` reuses for silent sign-in) is part of what stays the same: hosted and headless establish and read the same session.
 
 How-to: [Custom login UI](/docs/guides/custom-login-ui) · [Headless Auth reference](/docs/authserver/headless-auth) · [Phone OTP](/docs/authserver/phone-otp) · [Email Invitations](/docs/authserver/invitations) · [CLI OAuth](/docs/authserver/cli-oauth)

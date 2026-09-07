@@ -22,7 +22,7 @@ SqlOS exposes several HTTP surfaces from the same package, but they are not inte
 | --- | --- | --- |
 | OAuth protocol | OAuth clients, CLIs, and resource servers | Discoverable, standards-shaped endpoints such as `/authorize`, `/token`, device authorization, and JWKS |
 | Hosted AuthPage | A user's browser after your app redirects to `/authorize` | HTML pages and form handlers owned by SqlOS; do not build a client around individual form routes |
-| Headless AuthPage API | A host-owned custom sign-in UI | JSON state machine using `requestId` plus the SqlOS AuthPage session cookie |
+| Headless AuthPage API | A host-owned custom sign-in UI | JSON state machine using `requestId` plus the SqlOS issuer session cookie |
 | Direct JSON auth helpers | Deliberate host-owned integrations | Strongly typed SqlOS request/result records, but no single shared error envelope or blanket route authorization policy; review each route before exposing it |
 | Dashboard/operator APIs | The bundled dashboards and trusted backend administration | UI implementation endpoints, not a stable browser management SDK |
 
@@ -78,9 +78,9 @@ Discovery is the authoritative source for endpoint URLs and advertised capabilit
 | `code_challenge_method` | With PKCE | Only `S256` is supported. |
 | `resource` | When using resource indicators | Bound to the authorization code and refresh-token family; it cannot be introduced or changed later. |
 | `login_hint` | No | Prefills or routes the hosted/headless login flow. |
-| `prompt` | No | `login` skips first-party silent reuse of the AuthPage cookie and shows the hosted/headless form. Send this on an explicit Sign in or Sign up. `select_account` behaves like `login` (SqlOS has no account chooser yet). `consent` forces the [consent screen](/docs/authserver/consent) for a non-first-party client even when a covering grant exists. `none` returns `login_required` when no reusable session exists or the session is older than `max_age`, and `consent_required` when a non-first-party client lacks a covering consent grant. |
+| `prompt` | No | `login` skips first-party silent reuse of the issuer session cookie and shows the hosted/headless form. Send this on an explicit Sign in or Sign up. `select_account` behaves like `login` (SqlOS has no account chooser yet). `consent` forces the [consent screen](/docs/authserver/consent) for a non-first-party client even when a covering grant exists. `none` returns `login_required` when no reusable session exists or the session is older than `max_age`, and `consent_required` when a non-first-party client lacks a covering consent grant. |
 | `nonce` | No | Stored with the authorization request and copied onto the authorization code at issuance; the `id_token` minted at code exchange echoes the same `nonce` claim. |
-| `max_age` | No | Non-negative integer seconds. When the AuthPage session's original authentication is older than this, SqlOS re-challenges instead of silently reusing the session; `max_age=0` always forces a fresh sign-in. Combined with `prompt=none`, a stale session returns `login_required`. |
+| `max_age` | No | Non-negative integer seconds. When the issuer session's original authentication is older than this, SqlOS re-challenges instead of silently reusing the session; `max_age=0` always forces a fresh sign-in. Combined with `prompt=none`, a stale session returns `login_required`. |
 
 SqlOS-specific presentation parameters include `view` (`invite`, `login`, `signup`, `password`, `forgot-password`, `email-otp`, `phone-otp`, or `phone-otp-signup`), `ui_context` for a headless UI, and `invitation_token`/`invitationToken` for an invitation-bound flow. Portable OAuth clients should rely only on discovery and standard parameters.
 
@@ -235,7 +235,7 @@ Every hosted `POST` requires the short-lived antiforgery field and matching brow
 | `GET` / `POST` | `/sqlos/auth/password/reset` and `/password/reset/submit` | Hosted password-reset form |
 | `GET` | `/sqlos/auth/invitations/accept?token=...` | Open an email invitation |
 | `GET` / `POST` | `/sqlos/auth/device` and child routes | Resolve, approve, or deny a device request |
-| `GET` | `/sqlos/auth/logout` | End the reusable AuthPage session cookie and redirect safely. This is the browser Sign out. Clearing app tokens alone is not enough. |
+| `GET` | `/sqlos/auth/logout` | End the reusable issuer session cookie and redirect safely. This is the browser Sign out. Clearing app tokens alone is not enough. |
 | `GET` | `/sqlos/auth/logged-out` | Hosted post-logout page |
 
 Integrate through `/authorize`, `/token`, and the documented AuthPage configuration unless you are intentionally building a headless UI. `POST /sqlos/auth/signup` and `POST /sqlos/auth/logout` are JSON helpers described next; they are not hosted form handlers.
@@ -352,7 +352,7 @@ curl -X POST https://app.example.com/sqlos/auth/headless/start \
   }'
 ```
 
-`prompt`, `nonce`, `maxAge`, and `invitationToken` are also accepted as optional JSON fields with the same semantics as their `/authorize` query parameters. Headless `/start` never silently reuses an AuthPage session, so `maxAge` is not a re-challenge gate here; the value persists on the authorization request, and a positive `maxAge` is still enforced at code issuance when interstitials such as organization selection or MFA outlast it.
+`prompt`, `nonce`, `maxAge`, and `invitationToken` are also accepted as optional JSON fields with the same semantics as their `/authorize` query parameters. Headless `/start` never silently reuses an issuer session, so `maxAge` is not a re-challenge gate here; the value persists on the authorization request, and a positive `maxAge` is still enforced at code issuance when interstitials such as organization selection or MFA outlast it.
 
 Actions return `SqlOSHeadlessActionResult`. This abridged response shows the control-flow fields:
 
@@ -372,7 +372,7 @@ Actions return `SqlOSHeadlessActionResult`. This abridged response shows the con
 
 Keep `requestId` from the view model and send it in subsequent action requests. A completed action returns `type: "redirect"` with the registered client redirect URL; organization selection and MFA instead return another `view`. Validation failures currently use route-specific `400` bodies rather than one universal error object.
 
-For browser clients on a different origin, send credentialed requests so the reusable AuthPage session cookie is preserved. The cookie is HttpOnly; the response view model and action result are the UI contract. See [Build your own login and signup UI](/docs/guides/custom-login-ui) for the complete browser, PKCE, callback, CORS, and cookie walkthrough, or [Headless Auth](/docs/authserver/headless-auth) for feature details.
+For browser clients on a different origin, send credentialed requests so the reusable issuer session cookie is preserved. The cookie is HttpOnly; the response view model and action result are the UI contract. See [Build your own login and signup UI](/docs/guides/custom-login-ui) for the complete browser, PKCE, callback, CORS, and cookie walkthrough, or [Headless Auth](/docs/authserver/headless-auth) for feature details.
 
 ## Social OIDC and SAML callbacks
 

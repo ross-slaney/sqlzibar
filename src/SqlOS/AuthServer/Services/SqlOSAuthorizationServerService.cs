@@ -20,7 +20,7 @@ public sealed class SqlOSAuthorizationServerService
     private readonly SqlOSAuthService _authService;
     private readonly SqlOSCryptoService _cryptoService;
     private readonly SqlOSSettingsService _settingsService;
-    private readonly SqlOSAuthPageSessionService _authPageSessionService;
+    private readonly SqlOSIssuerSessionService _issuerSessionService;
     private readonly SqlOSAuthServerOptions _options;
     private readonly SqlOSInvitationService? _invitationService;
     private readonly SqlOSPasswordLoginAbuseService _passwordLoginAbuseService;
@@ -34,7 +34,7 @@ public sealed class SqlOSAuthorizationServerService
         SqlOSAuthService authService,
         SqlOSCryptoService cryptoService,
         SqlOSSettingsService settingsService,
-        SqlOSAuthPageSessionService authPageSessionService,
+        SqlOSIssuerSessionService issuerSessionService,
         IOptions<SqlOSAuthServerOptions> options,
         SqlOSInvitationService? invitationService = null,
         SqlOSPasswordLoginAbuseService? passwordLoginAbuseService = null,
@@ -47,7 +47,7 @@ public sealed class SqlOSAuthorizationServerService
         _authService = authService;
         _cryptoService = cryptoService;
         _settingsService = settingsService;
-        _authPageSessionService = authPageSessionService;
+        _issuerSessionService = issuerSessionService;
         _options = options.Value;
         _invitationService = invitationService;
         _passwordLoginAbuseService = passwordLoginAbuseService
@@ -1193,7 +1193,7 @@ public sealed class SqlOSAuthorizationServerService
             return continuationToken;
         }
 
-        return await TryMintConsentTokenFromAuthPageSessionAsync(authorizationRequest, httpContext, cancellationToken);
+        return await TryMintConsentTokenFromIssuerSessionAsync(authorizationRequest, httpContext, cancellationToken);
     }
 
     private async Task<string?> TryMintConsentTokenFromContinuationCookieAsync(
@@ -1260,18 +1260,18 @@ public sealed class SqlOSAuthorizationServerService
             cancellationToken);
     }
 
-    private async Task<string?> TryMintConsentTokenFromAuthPageSessionAsync(
+    private async Task<string?> TryMintConsentTokenFromIssuerSessionAsync(
         SqlOSAuthorizationRequest authorizationRequest,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        var session = await _authPageSessionService.TryGetSessionAsync(httpContext, cancellationToken);
+        var session = await _issuerSessionService.TryGetSessionAsync(httpContext, cancellationToken);
         if (session == null)
         {
             return null;
         }
 
-        // The auth-page session cookie is mutable (the browser can switch accounts between
+        // The issuer session cookie is mutable (the browser can switch accounts between
         // reaching consent and reloading it), so the fallback only mints for the user the
         // consent gate bound to the request. The gate always stamps the binding when it
         // mints the first consent token, so a missing binding means no consent is owed by
@@ -1364,7 +1364,7 @@ public sealed class SqlOSAuthorizationServerService
                             authorizationRequest.Id,
                             authenticationMethod,
                             // The caller's known authentication instant (SAML AuthnInstant /
-                            // upstream auth_time / the auth-page session cookie). When the
+                            // upstream auth_time / the issuer session cookie). When the
                             // caller has none, resolve it now: a live same-user session
                             // yields the original sign-in moment (silent SSO), and a fresh
                             // interactive flow reaches this gate immediately after
@@ -1784,9 +1784,9 @@ public sealed class SqlOSAuthorizationServerService
         {
             authorizationRequest.ResolvedAuthMethod = authenticationMethod;
             authorizationRequest.ResolvedOrganizationId = organizationId;
-            if (!await _authPageSessionService.CanContinuePresentingSessionAsync(httpContext, cancellationToken))
+            if (!await _issuerSessionService.CanContinuePresentingSessionAsync(httpContext, cancellationToken))
             {
-                throw new InvalidOperationException(SqlOSAuthPageSessionService.SessionNoLongerActiveMessage);
+                throw new InvalidOperationException(SqlOSIssuerSessionService.SessionNoLongerActiveMessage);
             }
 
             await _context.SaveChangesAsync(cancellationToken);
@@ -1798,9 +1798,9 @@ public sealed class SqlOSAuthorizationServerService
                 authorizationRequest.Id);
         }
 
-        if (!await _authPageSessionService.CanContinuePresentingSessionAsync(httpContext, cancellationToken))
+        if (!await _issuerSessionService.CanContinuePresentingSessionAsync(httpContext, cancellationToken))
         {
-            throw new InvalidOperationException(SqlOSAuthPageSessionService.SessionNoLongerActiveMessage);
+            throw new InvalidOperationException(SqlOSIssuerSessionService.SessionNoLongerActiveMessage);
         }
 
         var rawCode = _cryptoService.GenerateOpaqueToken();
@@ -1849,7 +1849,7 @@ public sealed class SqlOSAuthorizationServerService
         }
         catch (InvalidOperationException ex) when (string.Equals(
             ex.Message,
-            SqlOSAuthPageSessionService.SessionNoLongerActiveMessage,
+            SqlOSIssuerSessionService.SessionNoLongerActiveMessage,
             StringComparison.Ordinal))
         {
             await ConsumeIssuedAuthorizationCodeAsync(codeHash, cancellationToken);
@@ -1951,7 +1951,7 @@ public sealed class SqlOSAuthorizationServerService
         DateTime? authenticatedAt,
         CancellationToken cancellationToken)
     {
-        await _authPageSessionService.SignInAsync(
+        await _issuerSessionService.SignInAsync(
             httpContext,
             user,
             organizationId,
@@ -1959,9 +1959,9 @@ public sealed class SqlOSAuthorizationServerService
             authenticatedAt,
             continueExistingSession: true,
             cancellationToken);
-        if (!await _authPageSessionService.CanContinuePresentingSessionAsync(httpContext, cancellationToken))
+        if (!await _issuerSessionService.CanContinuePresentingSessionAsync(httpContext, cancellationToken))
         {
-            throw new InvalidOperationException(SqlOSAuthPageSessionService.SessionNoLongerActiveMessage);
+            throw new InvalidOperationException(SqlOSIssuerSessionService.SessionNoLongerActiveMessage);
         }
     }
 
@@ -1980,7 +1980,7 @@ public sealed class SqlOSAuthorizationServerService
 
     /// <summary>
     /// Resolves the moment the user actually authenticated for the sign-in completing
-    /// now. When the request carries a live auth-page session for the same user (silent
+    /// now. When the request carries a live issuer session for the same user (silent
     /// SSO reuse), the original authentication time is preserved; otherwise the user
     /// authenticated interactively in this request and the moment is now.
     /// </summary>
@@ -1989,7 +1989,7 @@ public sealed class SqlOSAuthorizationServerService
         string userId,
         CancellationToken cancellationToken)
     {
-        var existingSession = await _authPageSessionService.TryGetSessionAsync(httpContext, cancellationToken);
+        var existingSession = await _issuerSessionService.TryGetSessionAsync(httpContext, cancellationToken);
         return existingSession != null && string.Equals(existingSession.User.Id, userId, StringComparison.Ordinal)
             ? existingSession.AuthenticatedAt
             : DateTime.UtcNow;

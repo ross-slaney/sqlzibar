@@ -166,7 +166,7 @@ public sealed class SqlOSIssuanceAssuranceTests
         (await harness.Context.Set<SqlOSAuthorizationCode>()
             .CountAsync(x => x.AuthorizationRequestId == secondRequest.Id)).Should().Be(0);
         (await harness.Context.Set<SqlOSTemporaryToken>()
-            .CountAsync(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose && x.UserId == user.Id))
+            .CountAsync(x => x.Purpose == SqlOSAuthLifecyclePolicy.IssuerSessionPurpose && x.UserId == user.Id))
             .Should().Be(1);
     }
 
@@ -609,12 +609,12 @@ public sealed class SqlOSIssuanceAssuranceTests
         request.OrganizationId = harness.OrganizationId;
         await harness.Context.SaveChangesAsync();
 
-        // Simulate an auth-page session whose authentication aged past max_age
+        // Simulate an issuer session whose authentication aged past max_age
         // while the user completed the required MFA challenge.
         var staleAuthenticatedAt = DateTime.UtcNow.AddMinutes(-30);
         var signIn = new DefaultHttpContext();
         signIn.Request.Scheme = "https";
-        await harness.AuthPage.SignInAsync(signIn, user, harness.OrganizationId, "password", staleAuthenticatedAt);
+        await harness.IssuerSession.SignInAsync(signIn, user, harness.OrganizationId, "password", staleAuthenticatedAt);
         harness.Http.Request.Headers.Cookie = signIn.Response.Headers.SetCookie.ToString().Split(';', 2)[0];
 
         var completion = await harness.Authorization.CompleteAuthorizationRequestLoginAsync(
@@ -659,7 +659,7 @@ public sealed class SqlOSIssuanceAssuranceTests
         (await harness.Context.Set<SqlOSRefreshToken>().CountAsync()).Should().Be(0);
         (await harness.Context.Set<SqlOSDeviceAuthorization>().CountAsync(x => x.ApprovedAt != null)).Should().Be(0);
         (await harness.Context.Set<SqlOSTemporaryToken>()
-            .CountAsync(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose && x.UserId == userId))
+            .CountAsync(x => x.Purpose == SqlOSAuthLifecyclePolicy.IssuerSessionPurpose && x.UserId == userId))
             .Should().Be(0);
     }
 
@@ -674,7 +674,7 @@ public sealed class SqlOSIssuanceAssuranceTests
             SqlOSAdminService admin,
             SqlOSInvitationService invitations,
             SqlOSCryptoService crypto,
-            SqlOSAuthPageSessionService authPage,
+            SqlOSIssuerSessionService issuerSession,
             SqlOSTotpMfaService totp,
             DefaultHttpContext http)
         {
@@ -686,7 +686,7 @@ public sealed class SqlOSIssuanceAssuranceTests
             Admin = admin;
             Invitations = invitations;
             Crypto = crypto;
-            AuthPage = authPage;
+            IssuerSession = issuerSession;
             Totp = totp;
             Http = http;
         }
@@ -699,7 +699,7 @@ public sealed class SqlOSIssuanceAssuranceTests
         public SqlOSAdminService Admin { get; }
         public SqlOSInvitationService Invitations { get; }
         public SqlOSCryptoService Crypto { get; }
-        public SqlOSAuthPageSessionService AuthPage { get; }
+        public SqlOSIssuerSessionService IssuerSession { get; }
         public SqlOSTotpMfaService Totp { get; }
         public DefaultHttpContext Http { get; }
         public string OrganizationId { get; private set; } = null!;
@@ -737,7 +737,7 @@ public sealed class SqlOSIssuanceAssuranceTests
                 emailOtp,
                 mfaPolicyService: mfaPolicy,
                 totpMfaService: totp);
-            var authPage = new SqlOSAuthPageSessionService(context, crypto, settings);
+            var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
             var invitations = new SqlOSInvitationService(context, admin, crypto, emailSender, settings, options);
             var authorization = new SqlOSAuthorizationServerService(
                 context,
@@ -745,7 +745,7 @@ public sealed class SqlOSIssuanceAssuranceTests
                 auth,
                 crypto,
                 settings,
-                authPage,
+                issuerSession,
                 options,
                 invitationService: invitations,
                 mfaPolicyService: mfaPolicy,
@@ -764,7 +764,7 @@ public sealed class SqlOSIssuanceAssuranceTests
             await settings.EnsureDefaultMfaSettingsAsync();
             var organization = await admin.CreateOrganizationAsync(new SqlOSCreateOrganizationRequest("Issuance Org", null));
 
-            return new Harness(context, auth, authorization, device, settings, admin, invitations, crypto, authPage, totp, http)
+            return new Harness(context, auth, authorization, device, settings, admin, invitations, crypto, issuerSession, totp, http)
             {
                 OrganizationId = organization.Id
             };

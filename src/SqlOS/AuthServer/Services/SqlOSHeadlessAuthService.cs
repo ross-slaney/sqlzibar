@@ -26,7 +26,7 @@ public sealed class SqlOSHeadlessAuthService
     private readonly SqlOSPhoneOtpService? _phoneOtpService;
     private readonly SqlOSInvitationService? _invitationService;
     private readonly SqlOSDeviceAuthorizationService? _deviceAuthorizationService;
-    private readonly SqlOSAuthPageSessionService? _authPageSessionService;
+    private readonly SqlOSIssuerSessionService? _issuerSessionService;
     private readonly SqlOSAuthServerOptions _options;
 
     public SqlOSHeadlessAuthService(
@@ -41,7 +41,7 @@ public sealed class SqlOSHeadlessAuthService
         IOptions<SqlOSAuthServerOptions> options,
         SqlOSInvitationService? invitationService = null,
         SqlOSDeviceAuthorizationService? deviceAuthorizationService = null,
-        SqlOSAuthPageSessionService? authPageSessionService = null,
+        SqlOSIssuerSessionService? issuerSessionService = null,
         SqlOSPhoneOtpService? phoneOtpService = null,
         SqlOSAuthService? authService = null,
         SqlOSMagicLinkService? magicLinkService = null)
@@ -59,7 +59,7 @@ public sealed class SqlOSHeadlessAuthService
         _phoneOtpService = phoneOtpService;
         _invitationService = invitationService;
         _deviceAuthorizationService = deviceAuthorizationService;
-        _authPageSessionService = authPageSessionService;
+        _issuerSessionService = issuerSessionService;
         _options = options.Value;
     }
 
@@ -194,7 +194,7 @@ public sealed class SqlOSHeadlessAuthService
 
         // A consent reload arrives without its consent token whenever a custom BuildUiUrl
         // delegate did not forward the ConsentToken route field. Re-mint one from the
-        // browser's continuation cookie or live auth-page session; anonymous reloads get
+        // browser's continuation cookie or live issuer session; anonymous reloads get
         // the consent view without a token (fail closed).
         string? consentToken = null;
         if (httpContext != null && string.Equals(NormalizeView(requestedView), "consent", StringComparison.Ordinal))
@@ -297,7 +297,7 @@ public sealed class SqlOSHeadlessAuthService
         SqlOSHeadlessDeviceAuthorizationApproveRequest request,
         CancellationToken cancellationToken = default)
     {
-        var session = await RequireAuthPageSessionService().TryGetSessionAsync(httpContext, cancellationToken)
+        var session = await RequireIssuerSessionService().TryGetSessionAsync(httpContext, cancellationToken)
             ?? throw new InvalidOperationException("Sign in before approving this device request.");
 
         if (!string.IsNullOrWhiteSpace(request.RequestId))
@@ -325,7 +325,7 @@ public sealed class SqlOSHeadlessAuthService
                         cancellationToken);
                 }
 
-                session = await RequireAuthPageSessionService().TryGetSessionAsync(httpContext, cancellationToken)
+                session = await RequireIssuerSessionService().TryGetSessionAsync(httpContext, cancellationToken)
                     ?? throw new InvalidOperationException("Sign in before approving this device request.");
             }
 
@@ -388,7 +388,7 @@ public sealed class SqlOSHeadlessAuthService
                 cancellationToken);
         }
 
-        session = await RequireAuthPageSessionService().TryGetSessionAsync(httpContext, cancellationToken)
+        session = await RequireIssuerSessionService().TryGetSessionAsync(httpContext, cancellationToken)
             ?? throw new InvalidOperationException("Sign in before approving this device request.");
         var resolved = await RequireDeviceAuthorizationService().ApproveAsync(
             standaloneRequest,
@@ -421,7 +421,7 @@ public sealed class SqlOSHeadlessAuthService
         SqlOSHeadlessDeviceAuthorizationResolveRequest request,
         CancellationToken cancellationToken = default)
     {
-        var session = await RequireAuthPageSessionService().TryGetSessionAsync(httpContext, cancellationToken);
+        var session = await RequireIssuerSessionService().TryGetSessionAsync(httpContext, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.RequestId))
         {
             var authorizationRequest = await _authorizationServerService.GetRequiredAuthorizationRequestAsync(request.RequestId, cancellationToken);
@@ -2076,8 +2076,8 @@ public sealed class SqlOSHeadlessAuthService
     private SqlOSDeviceAuthorizationService RequireDeviceAuthorizationService()
         => _deviceAuthorizationService ?? throw new InvalidOperationException("Device authorization support is not configured.");
 
-    private SqlOSAuthPageSessionService RequireAuthPageSessionService()
-        => _authPageSessionService ?? throw new InvalidOperationException("AuthPage session support is not configured.");
+    private SqlOSIssuerSessionService RequireIssuerSessionService()
+        => _issuerSessionService ?? throw new InvalidOperationException("Issuer session support is not configured.");
 
     private async Task<SqlOSHeadlessViewModel> BuildStandaloneDeviceViewModelAsync(
         string view,

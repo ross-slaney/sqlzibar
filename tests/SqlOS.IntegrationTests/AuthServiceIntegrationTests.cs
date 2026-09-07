@@ -66,7 +66,7 @@ public sealed class AuthServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task AuthPageSession_AfterMembershipRemoval_IsRejectedAcrossDbContexts()
+    public async Task IssuerSession_AfterMembershipRemoval_IsRejectedAcrossDbContexts()
     {
         var email = $"cookie-offboard-{Guid.NewGuid():N}@example.com";
         string userId;
@@ -92,7 +92,7 @@ public sealed class AuthServiceIntegrationTests
                 .SingleAsync(x => x.Id == userId);
             var signIn = new DefaultHttpContext();
             signIn.Request.Scheme = "https";
-            await issuance.AuthPage.SignInAsync(signIn, user, organizationId, "password");
+            await issuance.IssuerSession.SignInAsync(signIn, user, organizationId, "password");
             rawCookie = signIn.Response.Headers.SetCookie.ToString().Split(';', 2)[0]["sqlos_auth_page=".Length..];
         }
 
@@ -108,7 +108,7 @@ public sealed class AuthServiceIntegrationTests
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Headers.Cookie = $"sqlos_auth_page={rawCookie}";
 
-        (await reuseInstance.AuthPage.TryGetSessionAsync(httpContext)).Should().BeNull();
+        (await reuseInstance.IssuerSession.TryGetSessionAsync(httpContext)).Should().BeNull();
         (await reuseInstance.Crypto.FindTemporaryTokenAsync("auth_page_session", rawCookie)).Should().BeNull();
     }
 
@@ -824,14 +824,14 @@ public sealed class AuthServiceIntegrationTests
         var settings = new SqlOSSettingsService(context, options, emailSender);
         var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
         var auth = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp);
-        var authPageSession = new SqlOSAuthPageSessionService(context, crypto, settings);
+        var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
         var authorization = new SqlOSAuthorizationServerService(
             context,
             admin,
             auth,
             crypto,
             settings,
-            authPageSession,
+            issuerSession,
             options);
         return new IsolatedAuthorizationServer(authorization, context);
     }
@@ -861,14 +861,14 @@ public sealed class AuthServiceIntegrationTests
         var settings = new SqlOSSettingsService(context, options, emailSender);
         var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
         var auth = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp);
-        var authPage = new SqlOSAuthPageSessionService(context, crypto, settings);
+        var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
         var authorization = new SqlOSAuthorizationServerService(
             context,
             admin,
             auth,
             crypto,
             settings,
-            authPage,
+            issuerSession,
             options);
         var domains = new SqlOSOrganizationDomainService(
             context,
@@ -877,7 +877,7 @@ public sealed class AuthServiceIntegrationTests
             admin,
             dnsVerifier ?? new RejectingDomainDnsVerifier());
         var portal = new SqlOSSsoPortalService(context, options, crypto, admin, domains);
-        return new IsolatedLifecycleStack(context, crypto, admin, auth, authPage, authorization, portal);
+        return new IsolatedLifecycleStack(context, crypto, admin, auth, issuerSession, authorization, portal);
     }
 
     private sealed class IsolatedLifecycleStack(
@@ -885,7 +885,7 @@ public sealed class AuthServiceIntegrationTests
         SqlOSCryptoService crypto,
         SqlOSAdminService admin,
         SqlOSAuthService auth,
-        SqlOSAuthPageSessionService authPage,
+        SqlOSIssuerSessionService issuerSession,
         SqlOSAuthorizationServerService authorization,
         SqlOSSsoPortalService portal) : IAsyncDisposable
     {
@@ -893,7 +893,7 @@ public sealed class AuthServiceIntegrationTests
         public SqlOSCryptoService Crypto { get; } = crypto;
         public SqlOSAdminService Admin { get; } = admin;
         public SqlOSAuthService Auth { get; } = auth;
-        public SqlOSAuthPageSessionService AuthPage { get; } = authPage;
+        public SqlOSIssuerSessionService IssuerSession { get; } = issuerSession;
         public SqlOSAuthorizationServerService Authorization { get; } = authorization;
         public SqlOSSsoPortalService Portal { get; } = portal;
 

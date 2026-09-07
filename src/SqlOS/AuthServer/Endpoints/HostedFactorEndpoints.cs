@@ -195,7 +195,7 @@ public static partial class EndpointRouteBuilderExtensions
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSMagicLinkService magicLinkService,
             SqlOSAuthService authService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             CancellationToken cancellationToken) =>
         {
             var form = await context.Request.ReadFormAsync(cancellationToken);
@@ -212,7 +212,7 @@ public static partial class EndpointRouteBuilderExtensions
                 if (string.IsNullOrWhiteSpace(verification.Payload.AuthorizationRequestId))
                 {
                     var organizationId = verification.Organizations.FirstOrDefault()?.Id;
-                    await authPageSessionService.SignInAsync(
+                    await issuerSessionService.SignInAsync(
                         context,
                         verification.User,
                         organizationId,
@@ -402,7 +402,7 @@ public static partial class EndpointRouteBuilderExtensions
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSPhoneOtpService phoneOtpService,
             SqlOSAuthService authService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             CancellationToken cancellationToken) =>
         {
             var form = await context.Request.ReadFormAsync(cancellationToken);
@@ -424,7 +424,7 @@ public static partial class EndpointRouteBuilderExtensions
                 if (authorizationRequest == null)
                 {
                     var organizationId = verification.Organizations.FirstOrDefault()?.Id;
-                    await authPageSessionService.SignInAsync(
+                    await issuerSessionService.SignInAsync(
                         context,
                         verification.User,
                         organizationId,

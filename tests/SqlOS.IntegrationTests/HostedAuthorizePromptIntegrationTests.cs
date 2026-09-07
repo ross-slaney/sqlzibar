@@ -30,7 +30,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         var login = await fixture.SubmitPasswordLoginWithSessionAsync(started);
         var afterLogin = DateTime.UtcNow.AddSeconds(1);
 
-        using var silent = await fixture.AuthorizeWithSessionAsync("openid profile", login.AuthPageCookie, maxAge: "3600");
+        using var silent = await fixture.AuthorizeWithSessionAsync("openid profile", login.IssuerSessionCookie, maxAge: "3600");
 
         silent.Response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         var location = silent.Response.Headers.Location!;
@@ -51,7 +51,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         var started = await fixture.StartAuthorizeAsync("openid");
         var login = await fixture.SubmitPasswordLoginWithSessionAsync(started);
 
-        using var challenged = await fixture.AuthorizeWithSessionAsync("openid", login.AuthPageCookie, maxAge: "0");
+        using var challenged = await fixture.AuthorizeWithSessionAsync("openid", login.IssuerSessionCookie, maxAge: "0");
 
         challenged.Response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await challenged.Response.Content.ReadAsStringAsync();
@@ -66,7 +66,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         var started = await fixture.StartAuthorizeAsync("openid");
         var login = await fixture.SubmitPasswordLoginWithSessionAsync(started);
 
-        using var denied = await fixture.AuthorizeWithSessionAsync("openid", login.AuthPageCookie, prompt: "none", maxAge: "0");
+        using var denied = await fixture.AuthorizeWithSessionAsync("openid", login.IssuerSessionCookie, prompt: "none", maxAge: "0");
 
         denied.Response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         var location = denied.Response.Headers.Location!;
@@ -83,7 +83,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         var started = await fixture.StartAuthorizeAsync("openid");
         var login = await fixture.SubmitPasswordLoginWithSessionAsync(started);
 
-        using var silent = await fixture.AuthorizeWithSessionAsync("openid", login.AuthPageCookie, prompt: "none");
+        using var silent = await fixture.AuthorizeWithSessionAsync("openid", login.IssuerSessionCookie, prompt: "none");
 
         silent.Response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         var query = QueryHelpers.ParseQuery(silent.Response.Headers.Location!.Query);
@@ -103,7 +103,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         // issues a code.
         using var silent = await fixture.AuthorizeWithSessionAsync(
             "openid",
-            login.AuthPageCookie,
+            login.IssuerSessionCookie,
             maxAge: "9223372036854775807");
 
         silent.Response.StatusCode.Should().Be(HttpStatusCode.Redirect);
@@ -123,7 +123,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         // when combined with other values.
         using var challenged = await fixture.AuthorizeWithSessionAsync(
             "openid",
-            login.AuthPageCookie,
+            login.IssuerSessionCookie,
             prompt: "select_account consent");
 
         challenged.Response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -139,7 +139,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         var started = await fixture.StartAuthorizeAsync("openid");
         var login = await fixture.SubmitPasswordLoginWithSessionAsync(started);
 
-        using var challenged = await fixture.AuthorizeWithSessionAsync("openid", login.AuthPageCookie, prompt: "select_account");
+        using var challenged = await fixture.AuthorizeWithSessionAsync("openid", login.IssuerSessionCookie, prompt: "select_account");
 
         challenged.Response.StatusCode.Should().Be(HttpStatusCode.OK);
         var html = await challenged.Response.Content.ReadAsStringAsync();
@@ -154,7 +154,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         var started = await fixture.StartAuthorizeAsync("openid");
         var login = await fixture.SubmitPasswordLoginWithSessionAsync(started);
 
-        using var rejected = await fixture.AuthorizeWithSessionAsync("openid", login.AuthPageCookie, maxAge: "not-a-number");
+        using var rejected = await fixture.AuthorizeWithSessionAsync("openid", login.IssuerSessionCookie, maxAge: "not-a-number");
 
         rejected.Response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -170,7 +170,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         // max_age=%20 is present but malformed; it must be rejected instead of
         // silently reading as absent and dropping the freshness constraint
         // (which would let silent SSO issue a code here).
-        using var rejected = await fixture.AuthorizeWithSessionAsync("openid", login.AuthPageCookie, maxAge: " ");
+        using var rejected = await fixture.AuthorizeWithSessionAsync("openid", login.IssuerSessionCookie, maxAge: " ");
 
         rejected.Response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -186,7 +186,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
         // OIDC Core 3.1.2.1: none MUST NOT be combined with any other value.
         using var rejected = await fixture.AuthorizeWithSessionAsync(
             "openid",
-            login.AuthPageCookie,
+            login.IssuerSessionCookie,
             prompt: "none login");
 
         rejected.Response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -204,7 +204,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
 
         using var rejected = await fixture.AuthorizeWithSessionAsync(
             "openid",
-            login.AuthPageCookie,
+            login.IssuerSessionCookie,
             prompt: "none consent");
 
         rejected.Response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -341,7 +341,7 @@ public sealed class HostedAuthorizePromptIntegrationTests
 
         var started = await fixture.StartAuthorizeAsync("openid");
         var login = await fixture.SubmitPasswordLoginWithSessionAsync(started);
-        var cookieA = login.AuthPageCookie;
+        var cookieA = login.IssuerSessionCookie;
         using var initialTokens = await fixture.ExchangeAuthorizationCodeAsync(login.Code, started.CodeVerifier);
         initialTokens.RootElement.GetProperty("access_token").GetString().Should().NotBeNullOrWhiteSpace();
 
@@ -375,11 +375,11 @@ public sealed class HostedAuthorizePromptIntegrationTests
         persisted.Tokens.Should().OnlyContain(token => token != null && token.ConsumedAt != null);
         persisted.Families.Should().ContainSingle();
         persisted.Families.Single().RevokedAt.Should().NotBeNull();
-        persisted.Families.Single().RevocationReason.Should().Be(SqlOSAuthPageSessionService.LogoutReason);
+        persisted.Families.Single().RevocationReason.Should().Be(SqlOSIssuerSessionService.LogoutReason);
     }
 
     [TestMethod]
-    public async Task Logout_DoesNotRevokeAnIndependentAuthPageSession()
+    public async Task Logout_DoesNotRevokeAnIndependentIssuerSession()
     {
         await using var fixture = await HostedAuthorizeTokenFixture.CreateAsync("LogoutIndependent");
         await fixture.SetClientAllowedScopesAsync("openid");
@@ -391,12 +391,12 @@ public sealed class HostedAuthorizePromptIntegrationTests
 
         var second = await fixture.StartAuthorizeAsync("openid");
         var secondLogin = await fixture.SubmitPasswordLoginWithSessionAsync(second);
-        secondLogin.AuthPageCookie.Should().NotBe(firstLogin.AuthPageCookie);
+        secondLogin.IssuerSessionCookie.Should().NotBe(firstLogin.IssuerSessionCookie);
 
-        using var loggedOut = await fixture.LogoutAsync(firstLogin.AuthPageCookie);
+        using var loggedOut = await fixture.LogoutAsync(firstLogin.IssuerSessionCookie);
         loggedOut.StatusCode.Should().NotBe(HttpStatusCode.InternalServerError);
 
-        using var independent = await fixture.AuthorizeWithSessionAsync("openid", secondLogin.AuthPageCookie, prompt: "none");
+        using var independent = await fixture.AuthorizeWithSessionAsync("openid", secondLogin.IssuerSessionCookie, prompt: "none");
         independent.Response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         var query = QueryHelpers.ParseQuery(independent.Response.Headers.Location!.Query);
         query["code"].ToString().Should().NotBeNullOrWhiteSpace();

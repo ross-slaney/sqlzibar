@@ -96,7 +96,7 @@ The Aspire AppHost sets `SQLOS_API_URL` so a second copy of this app (the browse
 
 `angular.json` excludes `@sqlos/headless` from the dev server's Vite prebundle. The package is a `file:` link, and Vite's dependency cache does not notice a rebuilt `dist` when the version is unchanged, so without the exclusion `ng serve` can keep serving a stale copy of the package.
 
-The API allows credentialed CORS requests from `http://localhost:4200` in addition to its configured primary frontend origin. Those credentials are used by the headless AuthPage session; application API requests use bearer or example demo headers.
+The API allows credentialed CORS requests from `http://localhost:4200` in addition to its configured primary frontend origin. Those credentials are used by the headless issuer session; application API requests use bearer or example demo headers.
 
 ## Code map
 

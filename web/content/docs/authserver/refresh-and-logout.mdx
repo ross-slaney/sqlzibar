@@ -60,11 +60,11 @@ A browser login creates **two** sessions. They do not share a lifetime.
 | Session | Where it lives | What it unlocks |
 | --- | --- | --- |
 | OAuth access and refresh tokens | Your app (`localStorage`, a BFF cookie, or a vault) | API calls |
-| AuthPage session | `sqlos_auth_page` cookie on the identity host | First-party `/authorize` without showing AuthPage |
+| Issuer session | `sqlos_auth_page` cookie on the identity host | First-party `/authorize` without showing AuthPage; shared by hosted, headless, and device-approval flows |
 
-Clearing the app tokens is not sign-out. The AuthPage cookie can last days. The next first-party Sign in or Sign up then mints a code immediately, and the user never sees AuthPage.
+Clearing the app tokens is not sign-out. The issuer session cookie can last days. The next first-party Sign in or Sign up then mints a code immediately, and the user never sees AuthPage.
 
-End the AuthPage session with a browser navigation so the cookie can be cleared:
+End the issuer session with a browser navigation so the cookie can be cleared:
 
 ```http
 GET /sqlos/auth/logout?returnTo=/
@@ -72,15 +72,15 @@ GET /sqlos/auth/logout?returnTo=/
 
 `returnTo` (or `post_logout_redirect_uri`) is resolved before SqlOS emits `Location`. A local destination is accepted only when it begins with exactly one `/`, contains no scheme or authority (including protocol-relative `//host` and backslash or encoded-authority variants), and still resolves under the configured application origin after decoding and normalization. Query and fragment are kept when that resolved destination stays local. Absolute `http`/`https` URIs are accepted only when their origin is the application origin or an origin already allowed by a registered redirect URI. Anything else, including `javascript:` and other non-http schemes, falls back to the hosted logged-out page.
 
-`GET /sqlos/auth/logout` revokes the **logical AuthPage session**, not only the cookie the browser currently presents. Silent renewal and later authorization completions mint a replacement `sqlos_auth_page` credential on the same session family. Logging out any credential in that family invalidates the current cookie and every superseded predecessor. A retained copy of an earlier cookie cannot obtain a new authorization code or access token after that logout.
+`GET /sqlos/auth/logout` revokes the **logical issuer session**, not only the cookie the browser currently presents. Silent renewal and later authorization completions mint a replacement `sqlos_auth_page` credential on the same session family. Logging out any credential in that family invalidates the current cookie and every superseded predecessor. A retained copy of an earlier cookie cannot obtain a new authorization code or access token after that logout.
 
-This is the AuthPage session used by website, mobile, desktop, and CLI sign-in when those clients go through the authorization server's browser or device-approval flow. Separately issued app access and refresh tokens keep their own logout lifecycle; clearing them does not end the AuthPage session, and AuthPage logout does not revoke those OAuth tokens.
+This is the issuer session used by website, mobile, desktop, and CLI sign-in when those clients go through the authorization server's browser or device-approval flow. Separately issued app access and refresh tokens keep their own logout lifecycle; clearing them does not end the issuer session, and issuer-session logout does not revoke those OAuth tokens.
 
-Upgrade note: applying the AuthPage session-family schema consumes already-issued, unlinked AuthPage cookies. Users sign in once after the upgrade. Independent browser or device logins remain separate sessions: logging out one does not sign out the others unless you call logout-all, reset the password, or revoke at user/organization scope.
+Upgrade note: applying the issuer session-family schema consumes already-issued, unlinked issuer session cookies. Users sign in once after the upgrade. Independent browser or device logins remain separate sessions: logging out one does not sign out the others unless you call logout-all, reset the password, or revoke at user/organization scope.
 
-After that, an explicit Sign in / Sign up should send `prompt=login` so a leftover cookie cannot silent-SSO. `view=signup` alone does not skip an existing AuthPage session.
+After that, an explicit Sign in / Sign up should send `prompt=login` so a leftover cookie cannot silent-SSO. `view=signup` alone does not skip an existing issuer session.
 
-`LogoutAsync` and `POST /sqlos/auth/logout` revoke the OAuth session and refresh-token family. They do not clear the AuthPage cookie. Call both when the user clicks Sign out: revoke the refresh token, then send the browser to `GET /sqlos/auth/logout`.
+`LogoutAsync` and `POST /sqlos/auth/logout` revoke the OAuth session and refresh-token family. They do not clear the issuer session cookie. Call both when the user clicks Sign out: revoke the refresh token, then send the browser to `GET /sqlos/auth/logout`.
 
 Revoke a session by refresh token:
 
@@ -100,7 +100,7 @@ Revoke all sessions for a user:
 await authService.LogoutAllAsync(userId, ct);
 ```
 
-Logout-all invalidates hosted AuthPage sessions as well as OAuth sessions and refresh-token families. Password reset has the same all-session invalidation behavior. Organization deactivation and the SSO organization-session revocation action invalidate the corresponding organization-bound AuthPage sessions.
+Logout-all invalidates issuer sessions as well as OAuth sessions and refresh-token families. Password reset has the same all-session invalidation behavior. Organization deactivation and the SSO organization-session revocation action invalidate the corresponding organization-bound issuer sessions.
 
 **Browser backend-for-frontend**:
 

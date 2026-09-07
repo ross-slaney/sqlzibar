@@ -780,14 +780,14 @@ public sealed class AuthServerSigningKeyResilienceIntegrationTests
         var settings = new SqlOSSettingsService(context, options, emailSender);
         var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
         var auth = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp);
-        var authPageSession = new SqlOSAuthPageSessionService(context, crypto, settings);
+        var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
         var authorizationServer = new SqlOSAuthorizationServerService(
             context,
             admin,
             auth,
             crypto,
             settings,
-            authPageSession,
+            issuerSession,
             options);
         return new ServiceStack(crypto, admin, authorizationServer);
     }

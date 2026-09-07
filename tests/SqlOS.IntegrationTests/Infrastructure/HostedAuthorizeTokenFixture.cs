@@ -202,13 +202,13 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
     }
 
     /// <summary>
-    /// Replays a captured auth-page session cookie against a fresh authorize request.
+    /// Replays a captured issuer session cookie against a fresh authorize request.
     /// Returns the raw response so callers can assert silent SSO (302 with a code),
     /// a re-challenge (200 login page), or an error redirect.
     /// </summary>
     public async Task<HostedSessionAuthorize> AuthorizeWithSessionAsync(
         string scope,
-        string authPageCookie,
+        string issuerSessionCookie,
         string? prompt = null,
         string? maxAge = null,
         string? nonce = null,
@@ -218,7 +218,7 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
         var codeVerifier = CreateCodeVerifier();
         var authorizeUrl = BuildAuthorizeUrl(scope, state: null, nonce, prompt, maxAge, codeVerifier, omitState: false, clientId, redirectUri);
         using var request = new HttpRequestMessage(HttpMethod.Get, authorizeUrl);
-        request.Headers.TryAddWithoutValidation("Cookie", authPageCookie);
+        request.Headers.TryAddWithoutValidation("Cookie", issuerSessionCookie);
         var response = await Client.SendAsync(request);
         return new HostedSessionAuthorize(response, codeVerifier);
     }
@@ -457,10 +457,10 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
         return JsonDocument.Parse(body);
     }
 
-    public async Task<HttpResponseMessage> LogoutAsync(string authPageCookie)
+    public async Task<HttpResponseMessage> LogoutAsync(string issuerSessionCookie)
     {
         using var logout = new HttpRequestMessage(HttpMethod.Get, "/sqlos/auth/logout?returnTo=/");
-        logout.Headers.TryAddWithoutValidation("Cookie", authPageCookie);
+        logout.Headers.TryAddWithoutValidation("Cookie", issuerSessionCookie);
         return await Client.SendAsync(logout);
     }
 
@@ -478,18 +478,18 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
             var hash = crypto.HashToken(value);
             tokens.Add(await db.Set<SqlOSTemporaryToken>()
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose
+                .FirstOrDefaultAsync(x => x.Purpose == SqlOSAuthLifecyclePolicy.IssuerSessionPurpose
                     && x.TokenHash == hash));
         }
 
         var familyIds = tokens
-            .Select(token => token?.AuthPageSessionFamilyId)
+            .Select(token => token?.IssuerSessionFamilyId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.Ordinal)
             .ToList();
         var families = familyIds.Count == 0
             ? []
-            : await db.Set<SqlOSAuthPageSessionFamily>()
+            : await db.Set<SqlOSIssuerSessionFamily>()
                 .AsNoTracking()
                 .Where(x => familyIds.Contains(x.Id))
                 .ToListAsync();
@@ -562,7 +562,7 @@ public sealed record HostedAuthorizeStart(
 
 public sealed record HostedLoginResult(
     string Code,
-    string AuthPageCookie,
+    string IssuerSessionCookie,
     string Location);
 
 public sealed record HostedConsentPage(
@@ -581,4 +581,4 @@ public sealed record HostedSessionAuthorize(
 
 public sealed record AuthPagePersistedInspection(
     IReadOnlyList<SqlOSTemporaryToken?> Tokens,
-    IReadOnlyList<SqlOSAuthPageSessionFamily> Families);
+    IReadOnlyList<SqlOSIssuerSessionFamily> Families);

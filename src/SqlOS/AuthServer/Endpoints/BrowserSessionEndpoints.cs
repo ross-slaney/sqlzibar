@@ -30,10 +30,10 @@ public static partial class EndpointRouteBuilderExtensions
         auth.MapGet("/logged-out", async (
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             CancellationToken cancellationToken) =>
         {
-            await authPageSessionService.SignOutAsync(context, cancellationToken);
+            await issuerSessionService.SignOutAsync(context, cancellationToken);
             var page = await BuildAuthPageViewModelAsync(
                 "logged-out",
                 null,
@@ -50,10 +50,10 @@ public static partial class EndpointRouteBuilderExtensions
         auth.MapGet("/logout", async (
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             CancellationToken cancellationToken) =>
         {
-            await authPageSessionService.SignOutAsync(context, cancellationToken);
+            await issuerSessionService.SignOutAsync(context, cancellationToken);
 
             var requestedReturnUrl = context.Request.Query["returnTo"].ToString();
             if (string.IsNullOrWhiteSpace(requestedReturnUrl))

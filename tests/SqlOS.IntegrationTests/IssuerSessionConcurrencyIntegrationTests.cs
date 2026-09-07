@@ -12,7 +12,7 @@ using SqlOS.IntegrationTests.Infrastructure;
 namespace SqlOS.IntegrationTests;
 
 [TestClass]
-public sealed class AuthPageSessionConcurrencyIntegrationTests
+public sealed class IssuerSessionConcurrencyIntegrationTests
 {
     [TestMethod]
     public async Task TwoRenewalsOfSameCookie_ThenLogout_InvalidatesEverySuccessor()
@@ -29,8 +29,8 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
 
         var seed = CreateHttpContext();
         seed.Request.Scheme = "https";
-        await setup.AuthPage.SignInAsync(seed, user, organizationId: null, "password");
-        var cookieA = ReadAuthPageCookie(seed);
+        await setup.IssuerSession.SignInAsync(seed, user, organizationId: null, "password");
+        var cookieA = ReadIssuerSessionCookie(seed);
 
         await using var first = BuildStack(CreateContext(connectionString), options);
         await using var second = BuildStack(CreateContext(connectionString), options);
@@ -40,16 +40,16 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
             await ready.Task;
             var http = CreateHttpContext();
             http.Request.Headers.Cookie = $"sqlos_auth_page={cookieA}";
-            await first.AuthPage.SignInAsync(http, user, organizationId: null, "password");
-            return ReadAuthPageCookie(http);
+            await first.IssuerSession.SignInAsync(http, user, organizationId: null, "password");
+            return ReadIssuerSessionCookie(http);
         });
         var secondTask = Task.Run(async () =>
         {
             await ready.Task;
             var http = CreateHttpContext();
             http.Request.Headers.Cookie = $"sqlos_auth_page={cookieA}";
-            await second.AuthPage.SignInAsync(http, user, organizationId: null, "password");
-            return ReadAuthPageCookie(http);
+            await second.IssuerSession.SignInAsync(http, user, organizationId: null, "password");
+            return ReadIssuerSessionCookie(http);
         });
         ready.SetResult(true);
         var cookies = await Task.WhenAll(firstTask, secondTask);
@@ -57,14 +57,14 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
         await using var logoutStack = BuildStack(CreateContext(connectionString), options);
         var logout = CreateHttpContext();
         logout.Request.Headers.Cookie = $"sqlos_auth_page={cookies[0]}";
-        await logoutStack.AuthPage.SignOutAsync(logout);
+        await logoutStack.IssuerSession.SignOutAsync(logout);
 
         await using var verify = CreateContext(connectionString);
-        var family = await verify.Set<SqlOSAuthPageSessionFamily>().SingleAsync();
+        var family = await verify.Set<SqlOSIssuerSessionFamily>().SingleAsync();
         family.RevokedAt.Should().NotBeNull();
 
         var liveTokens = await verify.Set<SqlOSTemporaryToken>()
-            .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose
+            .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.IssuerSessionPurpose
                 && x.UserId == user.Id
                 && x.ConsumedAt == null)
             .ToListAsync();
@@ -75,7 +75,7 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
         {
             var http = CreateHttpContext();
             http.Request.Headers.Cookie = $"sqlos_auth_page={cookie}";
-            (await replay.AuthPage.TryGetSessionAsync(http)).Should().BeNull();
+            (await replay.IssuerSession.TryGetSessionAsync(http)).Should().BeNull();
         }
     }
 
@@ -93,18 +93,18 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
             "P@ssword123!"));
 
         var seed = CreateHttpContext();
-        await setup.AuthPage.SignInAsync(seed, user, organizationId: null, "password");
-        var cookieA = ReadAuthPageCookie(seed);
+        await setup.IssuerSession.SignInAsync(seed, user, organizationId: null, "password");
+        var cookieA = ReadIssuerSessionCookie(seed);
 
         await using var logoutStack = BuildStack(CreateContext(connectionString), options);
         var logout = CreateHttpContext();
         logout.Request.Headers.Cookie = $"sqlos_auth_page={cookieA}";
-        await logoutStack.AuthPage.SignOutAsync(logout);
+        await logoutStack.IssuerSession.SignOutAsync(logout);
 
         await using var renewalStack = BuildStack(CreateContext(connectionString), options);
         var renewal = CreateHttpContext();
         renewal.Request.Headers.Cookie = $"sqlos_auth_page={cookieA}";
-        var act = () => renewalStack.AuthPage.SignInAsync(
+        var act = () => renewalStack.IssuerSession.SignInAsync(
             renewal,
             user,
             organizationId: null,
@@ -112,14 +112,14 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
             authenticatedAt: null,
             continueExistingSession: true);
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage(SqlOSAuthPageSessionService.SessionNoLongerActiveMessage);
+            .WithMessage(SqlOSIssuerSessionService.SessionNoLongerActiveMessage);
         renewal.Response.Headers.SetCookie.ToString().Should().NotContain("sqlos_auth_page=");
 
         await using var verify = CreateContext(connectionString);
-        var family = await verify.Set<SqlOSAuthPageSessionFamily>().SingleAsync();
+        var family = await verify.Set<SqlOSIssuerSessionFamily>().SingleAsync();
         family.RevokedAt.Should().NotBeNull();
         (await verify.Set<SqlOSTemporaryToken>()
-            .CountAsync(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose
+            .CountAsync(x => x.Purpose == SqlOSAuthLifecyclePolicy.IssuerSessionPurpose
                 && x.UserId == user.Id
                 && x.ConsumedAt == null)).Should().Be(0);
     }
@@ -138,12 +138,12 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
         var first = Task.Run(async () =>
         {
             await ready.Task;
-            return await fixture.AuthorizeWithSessionAsync("openid", login.AuthPageCookie, prompt: "none");
+            return await fixture.AuthorizeWithSessionAsync("openid", login.IssuerSessionCookie, prompt: "none");
         });
         var second = Task.Run(async () =>
         {
             await ready.Task;
-            return await fixture.AuthorizeWithSessionAsync("openid", login.AuthPageCookie, prompt: "none");
+            return await fixture.AuthorizeWithSessionAsync("openid", login.IssuerSessionCookie, prompt: "none");
         });
         ready.SetResult(true);
         using var firstRenewal = await first;
@@ -156,7 +156,7 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
         using var loggedOut = await fixture.LogoutAsync(cookieB!);
         loggedOut.StatusCode.Should().NotBe(System.Net.HttpStatusCode.InternalServerError);
 
-        foreach (var cookie in new[] { login.AuthPageCookie, cookieB!, cookieC! })
+        foreach (var cookie in new[] { login.IssuerSessionCookie, cookieB!, cookieC! })
         {
             using var replay = await fixture.AuthorizeWithSessionAsync("openid", cookie, prompt: "none");
             replay.Response.Headers.Location.Should().NotBeNull();
@@ -180,8 +180,8 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
         var crypto = new SqlOSCryptoService(context, options, AspireFixture.DataProtectionProvider);
         var admin = new SqlOSAdminService(context, options, crypto);
         var settings = new SqlOSSettingsService(context, options, new TestAuthEmailSender { IsConfigured = true });
-        var authPage = new SqlOSAuthPageSessionService(context, crypto, settings);
-        return new SessionStack(context, crypto, admin, authPage);
+        var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
+        return new SessionStack(context, crypto, admin, issuerSession);
     }
 
     private static TestSqlOSDbContext CreateContext(string connectionString)
@@ -197,25 +197,25 @@ public sealed class AuthPageSessionConcurrencyIntegrationTests
         return context;
     }
 
-    private static string ReadAuthPageCookie(HttpContext httpContext)
+    private static string ReadIssuerSessionCookie(HttpContext httpContext)
     {
         var pair = httpContext.Response.Headers.SetCookie.ToString().Split(';', 2)[0];
         const string prefix = "sqlos_auth_page=";
         return pair.StartsWith(prefix, StringComparison.Ordinal)
             ? pair[prefix.Length..]
-            : throw new InvalidOperationException($"AuthPage sign-in did not set a cookie: {pair}");
+            : throw new InvalidOperationException($"Issuer-session sign-in did not set a cookie: {pair}");
     }
 
     private sealed class SessionStack(
         TestSqlOSDbContext context,
         SqlOSCryptoService crypto,
         SqlOSAdminService admin,
-        SqlOSAuthPageSessionService authPage) : IAsyncDisposable
+        SqlOSIssuerSessionService issuerSession) : IAsyncDisposable
     {
         public TestSqlOSDbContext Context { get; } = context;
         public SqlOSCryptoService Crypto { get; } = crypto;
         public SqlOSAdminService Admin { get; } = admin;
-        public SqlOSAuthPageSessionService AuthPage { get; } = authPage;
+        public SqlOSIssuerSessionService IssuerSession { get; } = issuerSession;
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();
     }

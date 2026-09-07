@@ -245,7 +245,7 @@ public sealed class SqlOSCryptoService
         object? payload,
         TimeSpan? lifetime = null,
         CancellationToken cancellationToken = default,
-        string? authPageSessionFamilyId = null)
+        string? issuerSessionFamilyId = null)
     {
         var rawToken = GenerateOpaqueToken();
         var now = DateTime.UtcNow;
@@ -257,7 +257,7 @@ public sealed class SqlOSCryptoService
             UserId = userId,
             ClientApplicationId = clientApplicationId,
             OrganizationId = organizationId,
-            AuthPageSessionFamilyId = authPageSessionFamilyId,
+            IssuerSessionFamilyId = issuerSessionFamilyId,
             PayloadJson = payload != null ? JsonSerializer.Serialize(payload) : null,
             CreatedAt = now,
             ExpiresAt = now.Add(lifetime ?? _options.TemporaryTokenLifetime)

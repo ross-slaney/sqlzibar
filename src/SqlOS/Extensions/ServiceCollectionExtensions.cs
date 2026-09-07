@@ -120,7 +120,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SqlOSAdminService>();
         services.AddScoped<SqlOSSessionRevocationService>();
         services.AddScoped<SqlOSAuthService>();
-        services.AddScoped<SqlOSAuthPageSessionService>();
+        services.AddScoped<SqlOSIssuerSessionService>();
         services.AddScoped<SqlOSAuthorizationServerService>();
         services.AddScoped<SqlOSUserInfoService>();
         services.AddScoped<SqlOSConsentService>();

@@ -111,7 +111,7 @@ Every cross-origin headless request must use:
 credentials: "include"
 ```
 
-The SqlOS AuthPage session cookie is `HttpOnly`, uses `SameSite=Lax`, and is scoped to the identity host. An app at `app.relaydesk.example` and identity host at `identity.relaydesk.example` are different origins but the same site, so explicit credentialed CORS is the intended topology.
+The SqlOS issuer session cookie is `HttpOnly`, uses `SameSite=Lax`, and is scoped to the identity host. An app at `app.relaydesk.example` and identity host at `identity.relaydesk.example` are different origins but the same site, so explicit credentialed CORS is the intended topology.
 
 An app and identity host on unrelated sites are cross-site. `AllowCredentials()` does not override browser `SameSite` or third-party-cookie policy. Put the UI and identity host under the same registrable site, or use a reviewed first-party reverse proxy/backend-for-frontend that preserves the SqlOS cookie and does not log flow tokens.
 
@@ -245,7 +245,7 @@ When headless login completes, SqlOS redirects to the exact registered callback 
 
 Auth.js finishes at `/api/auth/callback/<id>`. `angular-oauth2-oidc` finishes with `tryLoginCodeFlow()`. `expo-auth-session` finishes with `exchangeCodeAsync`. Refresh uses `POST /sqlos/auth/token` with `grant_type=refresh_token` through the same library.
 
-Connect the library session to your application's reviewed storage design. Do not persist refresh tokens in `localStorage`, and do not confuse the SqlOS AuthPage cookie with your application's authenticated session.
+Connect the library session to your application's reviewed storage design. Do not persist refresh tokens in `localStorage`, and do not confuse the SqlOS issuer session cookie with your application's authenticated session.
 
 ## 8. Add product-owned signup fields
 
@@ -342,7 +342,7 @@ Compare these source files before adapting the pattern:
 | Login succeeds but the UI stops | Render the returned `organization`, `mfa`, or `mfa-enroll` view. Primary credentials do not bypass later policy. |
 | SSO domain still shows password | Always call `/identify`; do not choose password locally before HRD runs. |
 | Invitation loses its organization | Preserve the invitation-bound request and token; do not restart ordinary signup from an invite tab. |
-| Sign out, then Sign in skips AuthPage | The AuthPage cookie is still set. Navigate to `GET /sqlos/auth/logout?returnTo=...` and send `prompt=login` on the next `/authorize`. |
+| Sign out, then Sign in skips AuthPage | The issuer session cookie is still set. Navigate to `GET /sqlos/auth/logout?returnTo=...` and send `prompt=login` on the next `/authorize`. |
 
 ## Production checklist
 

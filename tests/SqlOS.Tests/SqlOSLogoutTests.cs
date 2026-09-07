@@ -116,7 +116,7 @@ public sealed class SqlOSLogoutTests
     }
 
     [TestMethod]
-    public async Task SignOutAsync_ConsumesAuthPageSessionToken_AndDeletesCookie()
+    public async Task SignOutAsync_ConsumesIssuerSessionToken_AndDeletesCookie()
     {
         await using var context = CreateContext();
         var options = Options.Create(new SqlOSAuthServerOptions());
@@ -124,7 +124,7 @@ public sealed class SqlOSLogoutTests
         var admin = new SqlOSAdminService(context, options, crypto);
         var emailSender = new TestAuthEmailSender();
         var settings = new SqlOSSettingsService(context, options, emailSender);
-        var authPageSessionService = new SqlOSAuthPageSessionService(context, crypto, settings);
+        var issuerSessionService = new SqlOSIssuerSessionService(context, crypto, settings);
 
         await crypto.EnsureActiveSigningKeyAsync();
 
@@ -140,7 +140,7 @@ public sealed class SqlOSLogoutTests
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Headers.Cookie = $"sqlos_auth_page={rawToken}";
 
-        await authPageSessionService.SignOutAsync(httpContext);
+        await issuerSessionService.SignOutAsync(httpContext);
 
         var storedToken = await crypto.FindTemporaryTokenAsync("auth_page_session", rawToken);
         storedToken.Should().BeNull();
@@ -151,114 +151,114 @@ public sealed class SqlOSLogoutTests
     public async Task SignOutAsync_RevokesFamilySoPredecessorCookieCannotBeReused()
     {
         await using var context = CreateContext();
-        var (authPage, crypto, user) = await CreateSessionStackAsync(context);
+        var (issuerSession, crypto, user) = await CreateSessionStackAsync(context);
 
         var first = new DefaultHttpContext();
         first.Request.Scheme = "https";
-        await authPage.SignInAsync(first, user, organizationId: null, "password");
-        var cookieA = ReadAuthPageCookie(first);
+        await issuerSession.SignInAsync(first, user, organizationId: null, "password");
+        var cookieA = ReadIssuerSessionCookie(first);
 
         var renewal = new DefaultHttpContext();
         renewal.Request.Scheme = "https";
         renewal.Request.Headers.Cookie = $"sqlos_auth_page={cookieA}";
-        await authPage.SignInAsync(renewal, user, organizationId: null, "password");
-        var cookieB = ReadAuthPageCookie(renewal);
+        await issuerSession.SignInAsync(renewal, user, organizationId: null, "password");
+        var cookieB = ReadIssuerSessionCookie(renewal);
 
         var logout = new DefaultHttpContext();
         logout.Request.Scheme = "https";
         logout.Request.Headers.Cookie = $"sqlos_auth_page={cookieB}";
-        await authPage.SignOutAsync(logout);
+        await issuerSession.SignOutAsync(logout);
 
         (await crypto.FindTemporaryTokenAsync("auth_page_session", cookieA)).Should().BeNull();
         (await crypto.FindTemporaryTokenAsync("auth_page_session", cookieB)).Should().BeNull();
 
         var replayA = new DefaultHttpContext();
         replayA.Request.Headers.Cookie = $"sqlos_auth_page={cookieA}";
-        (await authPage.TryGetSessionAsync(replayA)).Should().BeNull();
+        (await issuerSession.TryGetSessionAsync(replayA)).Should().BeNull();
 
         var continueExisting = async () =>
         {
             var blocked = new DefaultHttpContext();
             blocked.Request.Scheme = "https";
             blocked.Request.Headers.Cookie = $"sqlos_auth_page={cookieA}";
-            await authPage.SignInAsync(blocked, user, organizationId: null, "password", authenticatedAt: null, continueExistingSession: true);
+            await issuerSession.SignInAsync(blocked, user, organizationId: null, "password", authenticatedAt: null, continueExistingSession: true);
         };
         await continueExisting.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage(SqlOSAuthPageSessionService.SessionNoLongerActiveMessage);
+            .WithMessage(SqlOSIssuerSessionService.SessionNoLongerActiveMessage);
 
-        var family = await context.Set<SqlOS.AuthServer.Models.SqlOSAuthPageSessionFamily>().SingleAsync();
+        var family = await context.Set<SqlOS.AuthServer.Models.SqlOSIssuerSessionFamily>().SingleAsync();
         family.RevokedAt.Should().NotBeNull();
-        family.RevocationReason.Should().Be(SqlOSAuthPageSessionService.LogoutReason);
+        family.RevocationReason.Should().Be(SqlOSIssuerSessionService.LogoutReason);
     }
 
     [TestMethod]
-    public async Task SignOutAsync_LeavesAnIndependentAuthPageSessionUsable()
+    public async Task SignOutAsync_LeavesAnIndependentIssuerSessionUsable()
     {
         await using var context = CreateContext();
-        var (authPage, crypto, user) = await CreateSessionStackAsync(context);
+        var (issuerSession, crypto, user) = await CreateSessionStackAsync(context);
 
         var first = new DefaultHttpContext();
         first.Request.Scheme = "https";
-        await authPage.SignInAsync(first, user, organizationId: null, "password");
-        var cookieA = ReadAuthPageCookie(first);
+        await issuerSession.SignInAsync(first, user, organizationId: null, "password");
+        var cookieA = ReadIssuerSessionCookie(first);
 
         var second = new DefaultHttpContext();
         second.Request.Scheme = "https";
-        await authPage.SignInAsync(second, user, organizationId: null, "password");
-        var cookieB = ReadAuthPageCookie(second);
+        await issuerSession.SignInAsync(second, user, organizationId: null, "password");
+        var cookieB = ReadIssuerSessionCookie(second);
 
         var logout = new DefaultHttpContext();
         logout.Request.Scheme = "https";
         logout.Request.Headers.Cookie = $"sqlos_auth_page={cookieA}";
-        await authPage.SignOutAsync(logout);
+        await issuerSession.SignOutAsync(logout);
 
         (await crypto.FindTemporaryTokenAsync("auth_page_session", cookieA)).Should().BeNull();
         (await crypto.FindTemporaryTokenAsync("auth_page_session", cookieB)).Should().NotBeNull();
 
         var stillSignedIn = new DefaultHttpContext();
         stillSignedIn.Request.Headers.Cookie = $"sqlos_auth_page={cookieB}";
-        (await authPage.TryGetSessionAsync(stillSignedIn)).Should().NotBeNull();
+        (await issuerSession.TryGetSessionAsync(stillSignedIn)).Should().NotBeNull();
     }
 
     [TestMethod]
     public async Task SignOutAsync_RepeatedAndAbsentCookies_AreSafe()
     {
         await using var context = CreateContext();
-        var (authPage, _, user) = await CreateSessionStackAsync(context);
+        var (issuerSession, _, user) = await CreateSessionStackAsync(context);
 
         var signedIn = new DefaultHttpContext();
         signedIn.Request.Scheme = "https";
-        await authPage.SignInAsync(signedIn, user, organizationId: null, "password");
-        var cookie = ReadAuthPageCookie(signedIn);
+        await issuerSession.SignInAsync(signedIn, user, organizationId: null, "password");
+        var cookie = ReadIssuerSessionCookie(signedIn);
 
         var firstLogout = new DefaultHttpContext();
         firstLogout.Request.Scheme = "https";
         firstLogout.Request.Headers.Cookie = $"sqlos_auth_page={cookie}";
-        await authPage.SignOutAsync(firstLogout);
+        await issuerSession.SignOutAsync(firstLogout);
 
         var secondLogout = new DefaultHttpContext();
         secondLogout.Request.Scheme = "https";
         secondLogout.Request.Headers.Cookie = $"sqlos_auth_page={cookie}";
-        await authPage.SignOutAsync(secondLogout);
+        await issuerSession.SignOutAsync(secondLogout);
         secondLogout.Response.Headers.SetCookie.ToString().Should().Contain("sqlos_auth_page=");
 
         var missing = new DefaultHttpContext();
         missing.Request.Scheme = "https";
-        await authPage.SignOutAsync(missing);
+        await issuerSession.SignOutAsync(missing);
         missing.Response.Headers.SetCookie.ToString().Should().Contain("sqlos_auth_page=");
 
         var invalid = new DefaultHttpContext();
         invalid.Request.Scheme = "https";
         invalid.Request.Headers.Cookie = "sqlos_auth_page=not-a-real-token";
-        await authPage.SignOutAsync(invalid);
+        await issuerSession.SignOutAsync(invalid);
         invalid.Response.Headers.SetCookie.ToString().Should().Contain("sqlos_auth_page=");
     }
 
     [TestMethod]
-    public async Task TryGetSessionAsync_RejectsLegacyUnlinkedAuthPageCookies()
+    public async Task TryGetSessionAsync_RejectsLegacyUnlinkedIssuerSessionCookies()
     {
         await using var context = CreateContext();
-        var (authPage, crypto, user) = await CreateSessionStackAsync(context);
+        var (issuerSession, crypto, user) = await CreateSessionStackAsync(context);
         var rawToken = await crypto.CreateTemporaryTokenAsync(
             "auth_page_session",
             user.Id,
@@ -270,7 +270,7 @@ public sealed class SqlOSLogoutTests
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Headers.Cookie = $"sqlos_auth_page={rawToken}";
 
-        (await authPage.TryGetSessionAsync(httpContext)).Should().BeNull();
+        (await issuerSession.TryGetSessionAsync(httpContext)).Should().BeNull();
         (await crypto.FindTemporaryTokenAsync("auth_page_session", rawToken)).Should().BeNull();
     }
 
@@ -344,27 +344,27 @@ public sealed class SqlOSLogoutTests
         response.Headers.Location.Should().Be(new Uri("/safe", UriKind.Relative));
     }
 
-    private static async Task<(SqlOSAuthPageSessionService AuthPage, SqlOSCryptoService Crypto, SqlOSUser User)> CreateSessionStackAsync(
+    private static async Task<(SqlOSIssuerSessionService IssuerSession, SqlOSCryptoService Crypto, SqlOSUser User)> CreateSessionStackAsync(
         TestSqlOSInMemoryDbContext context)
     {
         var options = Options.Create(new SqlOSAuthServerOptions());
         var crypto = TestCryptoService.Create(context, options);
         var admin = new SqlOSAdminService(context, options, crypto);
         var settings = new SqlOSSettingsService(context, options, new TestAuthEmailSender());
-        var authPage = new SqlOSAuthPageSessionService(context, crypto, settings);
+        var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
         await crypto.EnsureActiveSigningKeyAsync();
         await settings.EnsureDefaultSettingsAsync();
         var user = await admin.CreateUserAsync(new SqlOSCreateUserRequest("Alice", "alice@example.com", "P@ssword123!"));
-        return (authPage, crypto, user);
+        return (issuerSession, crypto, user);
     }
 
-    private static string ReadAuthPageCookie(HttpContext httpContext)
+    private static string ReadIssuerSessionCookie(HttpContext httpContext)
     {
         var pair = httpContext.Response.Headers.SetCookie.ToString().Split(';', 2)[0];
         const string prefix = "sqlos_auth_page=";
         return pair.StartsWith(prefix, StringComparison.Ordinal)
             ? pair[prefix.Length..]
-            : throw new InvalidOperationException($"AuthPage sign-in did not set a cookie: {pair}");
+            : throw new InvalidOperationException($"Issuer-session sign-in did not set a cookie: {pair}");
     }
 
     private static async Task<(SqlOSAuthorizationServerService Service, DefaultHttpContext HttpContext)> CreateAuthorizationServerAsync()
@@ -381,7 +381,7 @@ public sealed class SqlOSLogoutTests
         var admin = new SqlOSAdminService(context, options, crypto);
         var emailSender = new TestAuthEmailSender();
         var settings = new SqlOSSettingsService(context, options, emailSender);
-        var authPageSessionService = new SqlOSAuthPageSessionService(context, crypto, settings);
+        var issuerSessionService = new SqlOSIssuerSessionService(context, crypto, settings);
         var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
         var authService = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp);
         var authorizationServerService = new SqlOSAuthorizationServerService(
@@ -390,7 +390,7 @@ public sealed class SqlOSLogoutTests
             authService,
             crypto,
             settings,
-            authPageSessionService,
+            issuerSessionService,
             options);
 
         await crypto.EnsureActiveSigningKeyAsync();

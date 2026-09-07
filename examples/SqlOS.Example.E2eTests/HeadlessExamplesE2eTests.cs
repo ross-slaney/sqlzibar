@@ -15,7 +15,7 @@ namespace SqlOS.Example.E2eTests;
 /// manually running demo on 5062/3010/4200 is left untouched, then drives
 /// Chromium through the journeys the HTTP integration tests cannot see: the
 /// package resuming a request in the browser, posting each step with the
-/// AuthPage cookie, recovering the authorization code from the redirect, and
+/// issuer-session cookie, recovering the authorization code from the redirect, and
 /// the host OIDC library (Auth.js, angular-oauth2-oidc) finishing <c>/token</c>.
 /// </summary>
 [TestClass]
@@ -271,7 +271,7 @@ public sealed class HeadlessExamplesE2eTests
     {
         Assert.IsNotNull(_browser, "browser fixture was not initialized");
         // Fresh context per test: isolated cookies, so each test owns its
-        // AuthPage session and its Auth.js / angular-oauth2-oidc session.
+        // issuer session and its Auth.js / angular-oauth2-oidc session.
         await using var context = await _browser.NewContextAsync();
         context.SetDefaultTimeout(30_000);
         context.SetDefaultNavigationTimeout(60_000);

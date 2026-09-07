@@ -133,7 +133,7 @@ public static partial class EndpointRouteBuilderExtensions
         hostedForms.MapPost("/signup/submit", async (
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSAuthService authService,
             SqlOSInvitationService invitationService,
             SqlOSHomeRealmDiscoveryService discoveryService,
@@ -200,7 +200,7 @@ public static partial class EndpointRouteBuilderExtensions
                         organizationId = acceptance.OrganizationId;
                     }
 
-                    await authPageSessionService.SignInAsync(context, signup.User, organizationId, signup.AuthenticationMethod, cancellationToken);
+                    await issuerSessionService.SignInAsync(context, signup.User, organizationId, signup.AuthenticationMethod, cancellationToken);
                     if (transaction != null)
                     {
                         await transaction.CommitAsync(cancellationToken);
@@ -257,7 +257,7 @@ public static partial class EndpointRouteBuilderExtensions
         hostedForms.MapPost("/signup/invitation/submit", async (
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSAuthService authService,
             SqlOSInvitationService invitationService,
             SqlOSSettingsService settingsService,
@@ -322,7 +322,7 @@ public static partial class EndpointRouteBuilderExtensions
                         context,
                         cancellationToken);
 
-                    await authPageSessionService.SignInAsync(context, signup.User, acceptance.OrganizationId, signup.AuthenticationMethod, cancellationToken);
+                    await issuerSessionService.SignInAsync(context, signup.User, acceptance.OrganizationId, signup.AuthenticationMethod, cancellationToken);
                     if (transaction != null)
                     {
                         await transaction.CommitAsync(cancellationToken);
@@ -467,7 +467,7 @@ public static partial class EndpointRouteBuilderExtensions
         hostedForms.MapPost("/signup/email-otp/verify", async (
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSAuthService authService,
             SqlOSEmailOtpService emailOtpService,
             ISqlOSAuthServerDbContext dbContext,
@@ -520,7 +520,7 @@ public static partial class EndpointRouteBuilderExtensions
                         organizationId = acceptance.OrganizationId;
                     }
 
-                    await authPageSessionService.SignInAsync(context, signup.User, organizationId, signup.AuthenticationMethod, cancellationToken);
+                    await issuerSessionService.SignInAsync(context, signup.User, organizationId, signup.AuthenticationMethod, cancellationToken);
                     await emailOtpService.ConsumeSignupTokenAsync(signupVerification.SignupToken, cancellationToken);
                     if (transaction != null)
                     {
@@ -653,7 +653,7 @@ public static partial class EndpointRouteBuilderExtensions
         hostedForms.MapPost("/signup/phone-otp/verify", async (
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSAuthService authService,
             SqlOSPhoneOtpService phoneOtpService,
             ISqlOSAuthServerDbContext dbContext,
@@ -702,7 +702,7 @@ public static partial class EndpointRouteBuilderExtensions
                 if (authorizationRequest == null)
                 {
                     var organizationId = signup.Organizations.FirstOrDefault()?.Id;
-                    await authPageSessionService.SignInAsync(context, signup.User, organizationId, signup.AuthenticationMethod, cancellationToken);
+                    await issuerSessionService.SignInAsync(context, signup.User, organizationId, signup.AuthenticationMethod, cancellationToken);
                     await phoneOtpService.ConsumeSignupTokenAsync(signupVerification.SignupToken, cancellationToken);
                     await adminService.RecordAuditAsync(
                         "user.signup.phone_otp",

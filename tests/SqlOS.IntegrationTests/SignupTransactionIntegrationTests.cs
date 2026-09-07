@@ -623,7 +623,7 @@ public sealed class SignupTransactionIntegrationTests
             var admin = new SqlOSAdminService(context, options, crypto);
             var emailSender = new TestAuthEmailSender { IsConfigured = true };
             var settings = new SqlOSSettingsService(context, options, emailSender);
-            var authPageSession = new SqlOSAuthPageSessionService(context, crypto, settings);
+            var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
             var transactionalEmail = new SqlOSTransactionalEmailService(
                 context,
                 crypto,
@@ -649,7 +649,7 @@ public sealed class SignupTransactionIntegrationTests
                 auth,
                 crypto,
                 settings,
-                authPageSession,
+                issuerSession,
                 options,
                 invitation,
                 passwordAbuse);

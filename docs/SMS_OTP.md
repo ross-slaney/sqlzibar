@@ -36,7 +36,7 @@ This is the exact setup path for testing SMS OTP in the Todo sample.
 
 8. Open `http://localhost:5080/`. The home page should show **SMS code sign in** and **SMS code sign up**. `/sample/config` should report `"phoneOtpEnabled": true`.
 
-Start SMS testing from the Todo sample home page, not directly from `/sqlos/auth/login`. A direct AuthPage sign-in creates a SqlOS auth-page session and shows `/sqlos/auth/login?status=signed-in`, but it does not give the Todo SPA an OAuth access token. The Todo app gets its token only when the flow starts at `http://localhost:5080/` and returns through `/callback.html`.
+Start SMS testing from the Todo sample home page, not directly from `/sqlos/auth/login`. A direct AuthPage sign-in creates a SqlOS issuer session and shows `/sqlos/auth/login?status=signed-in`, but it does not give the Todo SPA an OAuth access token. The Todo app gets its token only when the flow starts at `http://localhost:5080/` and returns through `/callback.html`.
 
 Do not buy or configure a Programmable Messaging phone number for this SqlOS integration. SqlOS calls Twilio Verify v2 with the Verify Service SID and `sms` channel; Verify manages the SMS sender path for the verification message.
 

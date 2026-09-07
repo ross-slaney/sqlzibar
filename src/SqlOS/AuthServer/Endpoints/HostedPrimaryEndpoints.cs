@@ -218,7 +218,7 @@ public static partial class EndpointRouteBuilderExtensions
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSDeviceAuthorizationService deviceAuthorizationService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSAuthService authService,
             SqlOSHeadlessAuthService headlessAuthService,
             CancellationToken cancellationToken) =>
@@ -270,7 +270,7 @@ public static partial class EndpointRouteBuilderExtensions
                         uiContext: SqlOSHeadlessAuthService.ParseUiContext(authorizationRequest.UiContextJson)));
                 }
 
-                var session = await authPageSessionService.TryGetSessionAsync(context, cancellationToken);
+                var session = await issuerSessionService.TryGetSessionAsync(context, cancellationToken);
                 var resolved = await deviceAuthorizationService.ResolveAsync(authorizationRequest, session?.User, cancellationToken);
                 if (session == null)
                 {
@@ -361,14 +361,14 @@ public static partial class EndpointRouteBuilderExtensions
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSDeviceAuthorizationService deviceAuthorizationService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSHeadlessAuthService headlessAuthService,
             CancellationToken cancellationToken) =>
         {
             var requestId = context.Request.Query["request"].ToString();
             var authorizationRequest = await authorizationServerService.TryGetActiveAuthorizationRequestAsync(requestId, cancellationToken)
                 ?? throw new InvalidOperationException("Device authorization request is invalid or expired.");
-            var session = await authPageSessionService.TryGetSessionAsync(context, cancellationToken);
+            var session = await issuerSessionService.TryGetSessionAsync(context, cancellationToken);
             var resolved = await deviceAuthorizationService.ResolveAsync(authorizationRequest, session?.User, cancellationToken);
             if (headlessAuthService.IsBrowserUiEnabled && SqlOSHeadlessAuthService.IsHeadlessRequest(authorizationRequest))
             {
@@ -421,7 +421,7 @@ public static partial class EndpointRouteBuilderExtensions
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSDeviceAuthorizationService deviceAuthorizationService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSAuthService authService,
             CancellationToken cancellationToken) =>
         {
@@ -429,7 +429,7 @@ public static partial class EndpointRouteBuilderExtensions
             var requestId = ReadRequestId(context, form);
             var userCode = form["userCode"].ToString();
             var organizationId = form["organizationId"].ToString();
-            var session = await authPageSessionService.TryGetSessionAsync(context, cancellationToken);
+            var session = await issuerSessionService.TryGetSessionAsync(context, cancellationToken);
             if (session == null)
             {
                 return Results.Redirect(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(
@@ -479,7 +479,7 @@ public static partial class EndpointRouteBuilderExtensions
                             cancellationToken);
                     }
 
-                    session = await authPageSessionService.TryGetSessionAsync(context, cancellationToken)
+                    session = await issuerSessionService.TryGetSessionAsync(context, cancellationToken)
                         ?? throw new InvalidOperationException("Sign in before approving this device request.");
                 }
 
@@ -546,13 +546,13 @@ public static partial class EndpointRouteBuilderExtensions
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSDeviceAuthorizationService deviceAuthorizationService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             CancellationToken cancellationToken) =>
         {
             var form = await context.Request.ReadFormAsync(cancellationToken);
             var requestId = ReadRequestId(context, form);
             var userCode = form["userCode"].ToString();
-            var session = await authPageSessionService.TryGetSessionAsync(context, cancellationToken);
+            var session = await issuerSessionService.TryGetSessionAsync(context, cancellationToken);
             if (!string.IsNullOrWhiteSpace(requestId))
             {
                 var authorizationRequest = await authorizationServerService.GetRequiredAuthorizationRequestAsync(requestId, cancellationToken);
@@ -645,7 +645,7 @@ public static partial class EndpointRouteBuilderExtensions
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSAuthService authService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSInvitationService invitationService,
             SqlOSHomeRealmDiscoveryService discoveryService,
             SqlOSSamlService samlService,
@@ -698,7 +698,7 @@ public static partial class EndpointRouteBuilderExtensions
                         organizationId = acceptance.OrganizationId;
                     }
 
-                    await authPageSessionService.SignInAsync(context, authentication.User, organizationId, authentication.AuthenticationMethod, cancellationToken);
+                    await issuerSessionService.SignInAsync(context, authentication.User, organizationId, authentication.AuthenticationMethod, cancellationToken);
                     return RedirectAfterStandaloneSignIn(authPrefix, invitation == null ? "signed-in" : "invitation-accepted", deviceUserCode);
                 }
                 var completion = await authorizationServerService.CompleteAuthorizationRequestLoginAsync(

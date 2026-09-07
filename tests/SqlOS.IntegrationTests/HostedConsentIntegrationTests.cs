@@ -68,11 +68,11 @@ public sealed class HostedConsentIntegrationTests
     public async Task ThirdParty_SecondAuthorizeWithSessionAndCoveringGrant_IssuesCodeSilently()
     {
         await using var fixture = await CreateFixtureAsync();
-        var authPageCookie = await ApproveInitialConsentAsync(fixture, "openid todo:read");
+        var issuerSessionCookie = await ApproveInitialConsentAsync(fixture, "openid todo:read");
 
         using var silent = await fixture.AuthorizeWithSessionAsync(
             "openid todo:read",
-            authPageCookie,
+            issuerSessionCookie,
             clientId: ThirdPartyClientId,
             redirectUri: ThirdPartyRedirect);
 
@@ -86,11 +86,11 @@ public sealed class HostedConsentIntegrationTests
     public async Task ThirdParty_ScopeEscalationWithSession_RePromptsForConsent()
     {
         await using var fixture = await CreateFixtureAsync();
-        var authPageCookie = await ApproveInitialConsentAsync(fixture, "openid");
+        var issuerSessionCookie = await ApproveInitialConsentAsync(fixture, "openid");
 
         using var escalated = await fixture.AuthorizeWithSessionAsync(
             "openid todo:read",
-            authPageCookie,
+            issuerSessionCookie,
             clientId: ThirdPartyClientId,
             redirectUri: ThirdPartyRedirect);
 
@@ -131,11 +131,11 @@ public sealed class HostedConsentIntegrationTests
     public async Task ThirdParty_PromptConsent_RePromptsDespiteCoveringGrant()
     {
         await using var fixture = await CreateFixtureAsync();
-        var authPageCookie = await ApproveInitialConsentAsync(fixture, "openid todo:read");
+        var issuerSessionCookie = await ApproveInitialConsentAsync(fixture, "openid todo:read");
 
         using var forced = await fixture.AuthorizeWithSessionAsync(
             "openid todo:read",
-            authPageCookie,
+            issuerSessionCookie,
             prompt: "consent",
             clientId: ThirdPartyClientId,
             redirectUri: ThirdPartyRedirect);
@@ -149,14 +149,14 @@ public sealed class HostedConsentIntegrationTests
     public async Task ThirdParty_PromptNone_WithoutCoveringGrant_ReturnsConsentRequired()
     {
         await using var fixture = await CreateFixtureAsync();
-        // Establish a live auth-page session through the first-party client so the
+        // Establish a live issuer session through the first-party client so the
         // third-party prompt=none request fails on consent, not on login.
         var firstPartyStart = await fixture.StartAuthorizeAsync("openid");
         var firstPartyLogin = await fixture.SubmitPasswordLoginWithSessionAsync(firstPartyStart);
 
         using var denied = await fixture.AuthorizeWithSessionAsync(
             "openid todo:read",
-            firstPartyLogin.AuthPageCookie,
+            firstPartyLogin.IssuerSessionCookie,
             prompt: "none",
             clientId: ThirdPartyClientId,
             redirectUri: ThirdPartyRedirect);
@@ -171,11 +171,11 @@ public sealed class HostedConsentIntegrationTests
     public async Task ThirdParty_PromptNone_WithCoveringGrantAndSession_IssuesCodeSilently()
     {
         await using var fixture = await CreateFixtureAsync();
-        var authPageCookie = await ApproveInitialConsentAsync(fixture, "openid todo:read");
+        var issuerSessionCookie = await ApproveInitialConsentAsync(fixture, "openid todo:read");
 
         using var silent = await fixture.AuthorizeWithSessionAsync(
             "openid todo:read",
-            authPageCookie,
+            issuerSessionCookie,
             prompt: "none",
             clientId: ThirdPartyClientId,
             redirectUri: ThirdPartyRedirect);
@@ -199,7 +199,7 @@ public sealed class HostedConsentIntegrationTests
         login.Location.Should().NotContain("consent");
 
         // Silent SSO reuse also stays consent-free.
-        using var silent = await fixture.AuthorizeWithSessionAsync("openid", login.AuthPageCookie);
+        using var silent = await fixture.AuthorizeWithSessionAsync("openid", login.IssuerSessionCookie);
         silent.Response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         QueryHelpers.ParseQuery(silent.Response.Headers.Location!.Query)["code"].ToString()
             .Should().NotBeNullOrWhiteSpace();
@@ -310,7 +310,7 @@ public sealed class HostedConsentIntegrationTests
 
     /// <summary>
     /// Runs the full first-visit consent approval for the third-party client and returns the
-    /// auth-page session cookie set alongside the issued code.
+    /// issuer session cookie set alongside the issued code.
     /// </summary>
     private static async Task<string> ApproveInitialConsentAsync(
         HostedAuthorizeTokenFixture fixture,
@@ -325,6 +325,6 @@ public sealed class HostedConsentIntegrationTests
         QueryHelpers.ParseQuery((await HostedAuthorizeTokenFixture.ReadClientRedirectAsync(approved)).Query)["code"].ToString()
             .Should().NotBeNullOrWhiteSpace();
         return HostedAuthorizeTokenFixture.TryExtractCookie(approved, "sqlos_auth_page=")
-            ?? throw new InvalidOperationException("Consent approval did not establish an auth-page session.");
+            ?? throw new InvalidOperationException("Consent approval did not establish an issuer session.");
     }
 }

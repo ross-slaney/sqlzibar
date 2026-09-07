@@ -109,7 +109,7 @@ public sealed class SchemaInitializerIntegrationTests
 
         Assert.IsTrue(
             await ColumnExistsAsync("SqlOSTemporaryTokens", "AuthPageSessionFamilyId"),
-            "AuthPage cookie credentials must link to a revocable session family.");
+            "Issuer-session cookie credentials must link to a revocable session family.");
 
         Assert.IsTrue(
             await IndexExistsAsync(AspireFixture.SharedContext, "SqlOSConsentGrants", "UX_SqlOSConsentGrants_ActiveUserClient"),

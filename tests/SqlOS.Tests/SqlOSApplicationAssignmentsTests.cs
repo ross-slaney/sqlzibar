@@ -462,11 +462,11 @@ public sealed class SqlOSApplicationAssignmentsTests
             var admin = new SqlOSAdminService(context, options, crypto);
             var emailSender = new TestAuthEmailSender();
             var settings = new SqlOSSettingsService(context, options, emailSender);
-            var authPageSession = new SqlOSAuthPageSessionService(context, crypto, settings);
+            var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
             var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
             var mfaPolicy = new SqlOSMfaPolicyService(context, settings, options);
             var auth = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp, mfaPolicyService: mfaPolicy);
-            var authorization = new SqlOSAuthorizationServerService(context, admin, auth, crypto, settings, authPageSession, options, mfaPolicyService: mfaPolicy);
+            var authorization = new SqlOSAuthorizationServerService(context, admin, auth, crypto, settings, issuerSession, options, mfaPolicyService: mfaPolicy);
             var device = new SqlOSDeviceAuthorizationService(context, admin, auth, crypto, options, mfaPolicy);
             var http = new DefaultHttpContext();
             http.Request.Scheme = "https";
