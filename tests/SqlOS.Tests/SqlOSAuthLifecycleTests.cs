@@ -64,18 +64,18 @@ public sealed class SqlOSAuthLifecycleTests
     }
 
     [TestMethod]
-    public async Task AuthPageSession_AfterMembershipRemoval_CannotIssueAuthorizationCode()
+    public async Task IssuerSession_AfterMembershipRemoval_CannotIssueAuthorizationCode()
     {
         await using var harness = await LifecycleHarness.CreateAsync();
         var subject = await harness.CreateOrganizationSubjectAsync("auth-page");
-        var rawCookie = await harness.CreateAuthPageSessionAsync(subject);
+        var rawCookie = await harness.CreateIssuerSessionAsync(subject);
 
         subject.Membership.IsActive = false;
         await harness.Context.SaveChangesAsync();
 
         var cookieRequest = new DefaultHttpContext();
         cookieRequest.Request.Headers.Cookie = $"sqlos_auth_page={rawCookie}";
-        (await harness.AuthPage.TryGetSessionAsync(cookieRequest)).Should().BeNull();
+        (await harness.IssuerSession.TryGetSessionAsync(cookieRequest)).Should().BeNull();
 
         var authorizationRequest = new SqlOSAuthorizationRequest
         {
@@ -218,7 +218,7 @@ public sealed class SqlOSAuthLifecycleTests
             first.Client);
         var firstTokens = await harness.IssueTokensAsync(first);
         var secondTokens = await harness.IssueTokensAsync(second);
-        var secondAuthPageCookie = await harness.CreateAuthPageSessionAsync(second);
+        var secondIssuerSessionCookie = await harness.CreateIssuerSessionAsync(second);
 
         first.Membership.IsActive = false;
         await harness.Context.SaveChangesAsync();
@@ -229,17 +229,17 @@ public sealed class SqlOSAuthLifecycleTests
             .Should().NotBeNull();
         (await harness.Context.Set<SqlOSSession>().SingleAsync(x => x.Id == secondTokens.SessionId))
             .RevokedAt.Should().BeNull();
-        (await harness.Crypto.FindTemporaryTokenAsync("auth_page_session", secondAuthPageCookie))
+        (await harness.Crypto.FindTemporaryTokenAsync("auth_page_session", secondIssuerSessionCookie))
             .Should().NotBeNull();
     }
 
     [TestMethod]
-    public async Task LogoutAll_AndOrgRevocation_InvalidateAuthPageSession()
+    public async Task LogoutAll_AndOrgRevocation_InvalidateIssuerSession()
     {
         await using var harness = await LifecycleHarness.CreateAsync();
         var logoutSubject = await harness.CreateOrganizationSubjectAsync("logout-all");
         var logoutTokens = await harness.IssueTokensAsync(logoutSubject);
-        var logoutCookie = await harness.CreateAuthPageSessionAsync(logoutSubject);
+        var logoutCookie = await harness.CreateIssuerSessionAsync(logoutSubject);
 
         await harness.Auth.LogoutAllAsync(logoutSubject.User.Id);
 
@@ -249,7 +249,7 @@ public sealed class SqlOSAuthLifecycleTests
         await refreshAfterLogout.Should().ThrowAsync<InvalidOperationException>();
 
         var organizationSubject = await harness.CreateOrganizationSubjectAsync("org-revoke");
-        var organizationCookie = await harness.CreateAuthPageSessionAsync(organizationSubject);
+        var organizationCookie = await harness.CreateIssuerSessionAsync(organizationSubject);
         await harness.Admin.UpdateOrganizationAsync(
             organizationSubject.Organization.Id,
             new SqlOSUpdateOrganizationRequest(
@@ -262,20 +262,20 @@ public sealed class SqlOSAuthLifecycleTests
     }
 
     [TestMethod]
-    public async Task LogoutAll_WithOnlyAuthPageSession_InvalidatesCookie()
+    public async Task LogoutAll_WithOnlyIssuerSession_InvalidatesCookie()
     {
         await using var harness = await LifecycleHarness.CreateAsync();
         var subject = await harness.CreateOrganizationSubjectAsync("auth-page-only");
-        var authPageCookie = await harness.CreateAuthPageSessionAsync(subject);
+        var issuerSessionCookie = await harness.CreateIssuerSessionAsync(subject);
 
         await harness.Auth.LogoutAllAsync(subject.User.Id);
 
         (await harness.Context.Set<SqlOSSession>().CountAsync(x => x.UserId == subject.User.Id)).Should().Be(0);
-        (await harness.Crypto.FindTemporaryTokenAsync("auth_page_session", authPageCookie)).Should().BeNull();
+        (await harness.Crypto.FindTemporaryTokenAsync("auth_page_session", issuerSessionCookie)).Should().BeNull();
     }
 
     [TestMethod]
-    public async Task PasswordReset_InvalidatesOAuthAndAuthPageSessions()
+    public async Task PasswordReset_InvalidatesOAuthAndIssuerSessions()
     {
         await using var harness = await LifecycleHarness.CreateAsync();
         var subject = await harness.CreateOrganizationSubjectAsync("password-reset");
@@ -285,7 +285,7 @@ public sealed class SqlOSAuthLifecycleTests
         var consumedParent = await harness.Context.Set<SqlOSRefreshToken>()
             .SingleAsync(x => x.TokenHash == harness.Crypto.HashToken(tokens.RefreshToken));
         consumedParent.ReplacementTokenResponse.Should().NotBeNull();
-        var authPageCookie = await harness.CreateAuthPageSessionAsync(subject);
+        var issuerSessionCookie = await harness.CreateIssuerSessionAsync(subject);
         const string verifier = "password-reset-verifier-123456789012345678901";
         var authorizationRequest = new SqlOSAuthorizationRequest
         {
@@ -367,7 +367,7 @@ public sealed class SqlOSAuthLifecycleTests
         await harness.Auth.ResetPasswordAsync(
             new SqlOSResetPasswordRequest(resetToken, "NewPassword123!"));
 
-        (await harness.Crypto.FindTemporaryTokenAsync("auth_page_session", authPageCookie)).Should().BeNull();
+        (await harness.Crypto.FindTemporaryTokenAsync("auth_page_session", issuerSessionCookie)).Should().BeNull();
         (await harness.Context.Set<SqlOSSession>().SingleAsync(x => x.Id == tokens.SessionId))
             .RevocationReason.Should().Be("password_reset");
         var revokedRefreshTokens = await harness.Context.Set<SqlOSRefreshToken>()
@@ -465,7 +465,7 @@ public sealed class SqlOSAuthLifecycleTests
         public required SqlOSCryptoService Crypto { get; init; }
         public required SqlOSAdminService Admin { get; init; }
         public required SqlOSAuthService Auth { get; init; }
-        public required SqlOSAuthPageSessionService AuthPage { get; init; }
+        public required SqlOSIssuerSessionService IssuerSession { get; init; }
         public required SqlOSAuthorizationServerService Authorization { get; init; }
 
         public static async Task<LifecycleHarness> CreateAsync()
@@ -486,14 +486,14 @@ public sealed class SqlOSAuthLifecycleTests
             var settings = new SqlOSSettingsService(context, options, emailSender);
             var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
             var auth = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp);
-            var authPage = new SqlOSAuthPageSessionService(context, crypto, settings);
+            var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
             var authorization = new SqlOSAuthorizationServerService(
                 context,
                 admin,
                 auth,
                 crypto,
                 settings,
-                authPage,
+                issuerSession,
                 options);
 
             await crypto.EnsureActiveSigningKeyAsync();
@@ -506,7 +506,7 @@ public sealed class SqlOSAuthLifecycleTests
                 Crypto = crypto,
                 Admin = admin,
                 Auth = auth,
-                AuthPage = authPage,
+                IssuerSession = issuerSession,
                 Authorization = authorization
             };
         }
@@ -536,21 +536,21 @@ public sealed class SqlOSAuthLifecycleTests
                 "LifecycleHarness",
                 "203.0.113.20");
 
-        public async Task<string> CreateAuthPageSessionAsync(OrganizationSubject subject)
+        public async Task<string> CreateIssuerSessionAsync(OrganizationSubject subject)
         {
             var http = new DefaultHttpContext();
             http.Request.Scheme = "https";
-            await AuthPage.SignInAsync(http, subject.User, subject.Organization.Id, "password");
-            return ReadAuthPageCookie(http);
+            await IssuerSession.SignInAsync(http, subject.User, subject.Organization.Id, "password");
+            return ReadIssuerSessionCookie(http);
         }
 
-        private static string ReadAuthPageCookie(HttpContext http)
+        private static string ReadIssuerSessionCookie(HttpContext http)
         {
             var pair = http.Response.Headers.SetCookie.ToString().Split(';', 2)[0];
             const string prefix = "sqlos_auth_page=";
             return pair.StartsWith(prefix, StringComparison.Ordinal)
                 ? pair[prefix.Length..]
-                : throw new InvalidOperationException($"AuthPage sign-in did not set a cookie: {pair}");
+                : throw new InvalidOperationException($"Issuer-session sign-in did not set a cookie: {pair}");
         }
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();

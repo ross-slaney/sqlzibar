@@ -8,10 +8,10 @@ namespace SqlOS.AuthServer.Services;
 internal static class SqlOSAuthLifecyclePolicy
 {
     internal const string DeniedEventType = "auth.lifecycle.denied";
-    internal const string AuthPageSessionPurpose = "auth_page_session";
+    internal const string IssuerSessionPurpose = "auth_page_session";
     private static readonly string[] SessionIssuanceTemporaryTokenPurposes =
     [
-        AuthPageSessionPurpose,
+        IssuerSessionPurpose,
         "auth_code",
         "auth_page_pending",
         "mfa_challenge",
@@ -143,19 +143,19 @@ internal static class SqlOSAuthLifecyclePolicy
 
         var temporaryTokens = await temporaryTokensQuery.ToListAsync(cancellationToken);
 
-        var authPageFamiliesQuery = context.Set<SqlOSAuthPageSessionFamily>()
+        var issuerSessionFamiliesQuery = context.Set<SqlOSIssuerSessionFamily>()
             .Where(x => x.RevokedAt == null);
         if (!string.IsNullOrWhiteSpace(userId))
         {
-            authPageFamiliesQuery = authPageFamiliesQuery.Where(x => x.UserId == userId);
+            issuerSessionFamiliesQuery = issuerSessionFamiliesQuery.Where(x => x.UserId == userId);
         }
 
         if (!string.IsNullOrWhiteSpace(organizationId))
         {
-            authPageFamiliesQuery = authPageFamiliesQuery.Where(x => x.OrganizationId == organizationId);
+            issuerSessionFamiliesQuery = issuerSessionFamiliesQuery.Where(x => x.OrganizationId == organizationId);
         }
 
-        var authPageFamilies = await authPageFamiliesQuery.ToListAsync(cancellationToken);
+        var issuerSessionFamilies = await issuerSessionFamiliesQuery.ToListAsync(cancellationToken);
 
         var authorizationCodesQuery = context.Set<SqlOSAuthorizationCode>()
             .Where(x => x.ConsumedAt == null);
@@ -232,7 +232,7 @@ internal static class SqlOSAuthLifecyclePolicy
             temporaryToken.ConsumedAt = now;
         }
 
-        foreach (var family in authPageFamilies)
+        foreach (var family in issuerSessionFamilies)
         {
             family.RevokedAt = now;
             family.RevocationReason = reason;

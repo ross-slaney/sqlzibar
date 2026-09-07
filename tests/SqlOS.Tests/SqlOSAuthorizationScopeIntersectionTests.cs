@@ -113,7 +113,7 @@ public sealed class SqlOSAuthorizationScopeIntersectionTests
         var admin = new SqlOSAdminService(context, options, crypto);
         var emailSender = new TestAuthEmailSender();
         var settings = new SqlOSSettingsService(context, options, emailSender);
-        var authPageSessionService = new SqlOSAuthPageSessionService(context, crypto, settings);
+        var issuerSessionService = new SqlOSIssuerSessionService(context, crypto, settings);
         var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
         var authService = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp);
         var authorization = new SqlOSAuthorizationServerService(
@@ -122,7 +122,7 @@ public sealed class SqlOSAuthorizationScopeIntersectionTests
             authService,
             crypto,
             settings,
-            authPageSessionService,
+            issuerSessionService,
             options);
         await admin.UpsertSeededClientsAsync();
         return new Harness(context, authorization);

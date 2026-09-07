@@ -642,7 +642,7 @@ public sealed class SqlOSConsentTests
         var sessionHttp = await harness.CreateSessionHttpContextAsync(user, sessionAuthenticatedAt);
         var request = await harness.CreateThirdPartyRequestAsync("openid todo:read");
 
-        // Silent SSO: the browser reaches consent through an existing auth-page session, so
+        // Silent SSO: the browser reaches consent through an existing issuer session, so
         // the gate must stamp the ORIGINAL sign-in moment into the pending consent token.
         var completion = await harness.Authorization.CompleteAuthorizationRequestLoginAsync(
             request,
@@ -840,7 +840,7 @@ public sealed class SqlOSConsentTests
             SqlOSConsentService consent,
             SqlOSAdminService admin,
             SqlOSCryptoService crypto,
-            SqlOSAuthPageSessionService authPage,
+            SqlOSIssuerSessionService issuerSession,
             DefaultHttpContext http)
         {
             Context = context;
@@ -849,7 +849,7 @@ public sealed class SqlOSConsentTests
             Consent = consent;
             Admin = admin;
             Crypto = crypto;
-            AuthPage = authPage;
+            IssuerSession = issuerSession;
             Http = http;
         }
 
@@ -859,7 +859,7 @@ public sealed class SqlOSConsentTests
         public SqlOSConsentService Consent { get; }
         public SqlOSAdminService Admin { get; }
         public SqlOSCryptoService Crypto { get; }
-        public SqlOSAuthPageSessionService AuthPage { get; }
+        public SqlOSIssuerSessionService IssuerSession { get; }
         public DefaultHttpContext Http { get; }
         public string OrganizationId { get; private set; } = null!;
 
@@ -893,7 +893,7 @@ public sealed class SqlOSConsentTests
             var settings = new SqlOSSettingsService(context, options, emailSender);
             var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
             var auth = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp);
-            var authPage = new SqlOSAuthPageSessionService(context, crypto, settings);
+            var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
             var consent = new SqlOSConsentService(context, crypto);
             var authorization = new SqlOSAuthorizationServerService(
                 context,
@@ -901,7 +901,7 @@ public sealed class SqlOSConsentTests
                 auth,
                 crypto,
                 settings,
-                authPage,
+                issuerSession,
                 options,
                 consentService: consent);
             var http = new DefaultHttpContext();
@@ -916,15 +916,15 @@ public sealed class SqlOSConsentTests
             await settings.EnsureDefaultMfaSettingsAsync();
             var organization = await admin.CreateOrganizationAsync(new SqlOSCreateOrganizationRequest("Consent Org", null));
 
-            return new Harness(context, authOptions, authorization, consent, admin, crypto, authPage, http)
+            return new Harness(context, authOptions, authorization, consent, admin, crypto, issuerSession, http)
             {
                 OrganizationId = organization.Id
             };
         }
 
         /// <summary>
-        /// Mints a live auth-page session cookie for the user (mirroring
-        /// SqlOSAuthPageSessionService.SignInAsync) and returns an HttpContext carrying it,
+        /// Mints a live issuer session cookie for the user (mirroring
+        /// SqlOSIssuerSessionService.SignInAsync) and returns an HttpContext carrying it,
         /// so reload paths observe the browser's current session.
         /// </summary>
         public async Task<DefaultHttpContext> CreateSessionHttpContextAsync(SqlOSUser user, DateTime? authenticatedAt = null)
@@ -932,7 +932,7 @@ public sealed class SqlOSConsentTests
             var signIn = new DefaultHttpContext();
             signIn.Request.Scheme = "https";
             signIn.Request.Host = new HostString("auth.example.test");
-            await AuthPage.SignInAsync(signIn, user, OrganizationId, "password", authenticatedAt);
+            await IssuerSession.SignInAsync(signIn, user, OrganizationId, "password", authenticatedAt);
             var pair = signIn.Response.Headers.SetCookie.ToString().Split(';', 2)[0];
             var http = new DefaultHttpContext();
             http.Request.Scheme = "https";

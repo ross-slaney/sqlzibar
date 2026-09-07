@@ -646,7 +646,7 @@ public sealed class SqlOSDeviceAuthorization
 
     /// <summary>
     /// When the approving user actually authenticated. Preserved from the approving
-    /// auth-page session so device-grant sessions do not claim approval-click
+    /// issuer session so device-grant sessions do not claim approval-click
     /// freshness for <c>auth_time</c>.
     /// </summary>
     public DateTime? AuthTime { get; set; }
@@ -681,21 +681,25 @@ public sealed class SqlOSTemporaryToken
     public string? UserId { get; set; }
     public string? ClientApplicationId { get; set; }
     public string? OrganizationId { get; set; }
-    public string? AuthPageSessionFamilyId { get; set; }
+    public string? IssuerSessionFamilyId { get; set; }
     public string? PayloadJson { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
     public DateTime? ConsumedAt { get; set; }
 
-    public SqlOSAuthPageSessionFamily? AuthPageSessionFamily { get; set; }
+    public SqlOSIssuerSessionFamily? IssuerSessionFamily { get; set; }
 }
 
 /// <summary>
-/// Durable AuthPage cookie family. Silent renewal mints a new cookie credential
+/// Durable issuer-session cookie family. The issuer session is the browser
+/// sign-in at the authorization server that hosted, headless, and
+/// device-approval flows share. Silent renewal mints a new cookie credential
 /// on the same family; logout and lifecycle revocation invalidate every
 /// credential in that family, including superseded predecessors.
+/// The persisted table and column keep their original
+/// <c>SqlOSAuthPageSessionFamilies</c> / <c>AuthPageSessionFamilyId</c> names.
 /// </summary>
-public sealed class SqlOSAuthPageSessionFamily
+public sealed class SqlOSIssuerSessionFamily
 {
     public string Id { get; set; } = string.Empty;
     public string UserId { get; set; } = string.Empty;

@@ -147,7 +147,7 @@ After password, Email OTP, OIDC, SAML, signup, or organization selection:
 4. If the user must enroll, SqlOS renders `Add authenticator app` with a QR code and manual setup secret.
 5. Successful MFA appends the second factor to the authentication methods.
 
-Primary authentication alone cannot issue an authorization code, AuthPage session, access token, refresh token, or device approval. Email OTP, password, invitation, and ordinary upstream OIDC or SAML do not count as MFA. Phone OTP satisfies MFA only when `PhoneOtp.SatisfiesMfa` is enabled. Explicitly trusted upstream MFA remains accepted. If policy becomes stricter between the first factor and issuance, SqlOS re-evaluates and refuses to issue.
+Primary authentication alone cannot issue an authorization code, issuer session, access token, refresh token, or device approval. Email OTP, password, invitation, and ordinary upstream OIDC or SAML do not count as MFA. Phone OTP satisfies MFA only when `PhoneOtp.SatisfiesMfa` is enabled. Explicitly trusted upstream MFA remains accepted. If policy becomes stricter between the first factor and issuance, SqlOS re-evaluates and refuses to issue.
 
 These states are intentionally separate. A normal `mfa` challenge never grants
 authenticator enrollment, even if the caller has completed the password step.

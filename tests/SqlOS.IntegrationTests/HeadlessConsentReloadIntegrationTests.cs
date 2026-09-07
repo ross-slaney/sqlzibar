@@ -28,7 +28,7 @@ namespace SqlOS.IntegrationTests;
 /// Wire coverage for reloading a browser-headless consent view through
 /// GET /headless/requests/{id}. Custom BuildUiUrl delegates may forward only the request id
 /// and view — dropping the ConsentToken route field — so the server must re-mint a usable
-/// consent token from what the same browser actually carries (auth-page session cookie or
+/// consent token from what the same browser actually carries (issuer session cookie or
 /// the per-request sqlos_auth_continue_{hash} continuation cookie), while an anonymous
 /// reload gets the consent view with no token at all.
 /// </summary>
@@ -43,11 +43,11 @@ public sealed class HeadlessConsentReloadIntegrationTests
     private const string Password = "P@ssword123!";
 
     [TestMethod]
-    public async Task ConsentReload_WithLiveAuthPageSession_ReturnsUsableToken_AnonymousReloadGetsNone()
+    public async Task ConsentReload_WithLiveIssuerSession_ReturnsUsableToken_AnonymousReloadGetsNone()
     {
         await using var host = await HeadlessHost.CreateAsync();
 
-        // A first-party headless login establishes the auth-page session cookie.
+        // A first-party headless login establishes the issuer session cookie.
         var firstPartyRequestId = await StartHeadlessAuthorizeAsync(host, FirstPartyClientId, FirstPartyRedirect, "openid");
         using var login = await host.Client.PostAsJsonAsync(
             "/sqlos/auth/headless/password/login",
@@ -56,14 +56,14 @@ public sealed class HeadlessConsentReloadIntegrationTests
         using var loginBody = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
         loginBody.RootElement.GetProperty("type").GetString().Should().Be("redirect");
         loginBody.RootElement.GetProperty("redirectUrl").GetString().Should().Contain("code=");
-        var authPageCookie = ExtractCookie(login, "sqlos_auth_page=");
+        var issuerSessionCookie = ExtractCookie(login, "sqlos_auth_page=");
 
         // Silent SSO into the third-party client rides the session straight to consent; the
         // custom BuildUiUrl delegate drops the ConsentToken route field.
         using var authorize = await SendWithCookieAsync(
             host,
             BuildAuthorizeUrl(ThirdPartyClientId, ThirdPartyRedirect, "openid todo:read"),
-            authPageCookie);
+            issuerSessionCookie);
         authorize.StatusCode.Should().Be(HttpStatusCode.Redirect);
         var uiLocation = authorize.Headers.Location!;
         uiLocation.AbsoluteUri.Should().StartWith("https://app.example.test/auth-ui");
@@ -77,7 +77,7 @@ public sealed class HeadlessConsentReloadIntegrationTests
         using var reload = await SendWithCookieAsync(
             host,
             $"/sqlos/auth/headless/requests/{requestId}?view=consent",
-            authPageCookie);
+            issuerSessionCookie);
         reload.StatusCode.Should().Be(HttpStatusCode.OK);
         using var reloadBody = JsonDocument.Parse(await reload.Content.ReadAsStringAsync());
         reloadBody.RootElement.GetProperty("view").GetString().Should().Be("consent");
@@ -136,7 +136,7 @@ public sealed class HeadlessConsentReloadIntegrationTests
         var originalConsentToken = viewModel.GetProperty("consentToken").GetString();
         originalConsentToken.Should().NotBeNullOrWhiteSpace();
         TryExtractCookie(login, "sqlos_auth_page=").Should().BeNull(
-            "consent runs before the auth-page session is signed in");
+            "consent runs before the issuer session is signed in");
 
         // Social-login callbacks persist the pending interaction in the per-request
         // sqlos_auth_continue_{hash} cookie; mint that continuation for this consent token

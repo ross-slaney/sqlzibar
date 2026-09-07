@@ -5,10 +5,10 @@ using SqlOS.AuthServer.Models;
 
 namespace SqlOS.AuthServer.Services;
 
-public sealed class SqlOSAuthPageSessionService
+public sealed class SqlOSIssuerSessionService
 {
     private const string CookieName = "sqlos_auth_page";
-    private const string FamilyItemKey = "SqlOS.AuthPageSessionFamilyId";
+    private const string FamilyItemKey = "SqlOS.IssuerSessionFamilyId";
 
     public const string SessionNoLongerActiveMessage = "Authentication session is no longer active.";
 
@@ -19,7 +19,7 @@ public sealed class SqlOSAuthPageSessionService
     private readonly SqlOSCryptoService _cryptoService;
     private readonly SqlOSSettingsService _settingsService;
 
-    public SqlOSAuthPageSessionService(
+    public SqlOSIssuerSessionService(
         ISqlOSAuthServerDbContext context,
         SqlOSCryptoService cryptoService,
         SqlOSSettingsService settingsService)
@@ -29,7 +29,7 @@ public sealed class SqlOSAuthPageSessionService
         _settingsService = settingsService;
     }
 
-    public async Task<SqlOSAuthPageSession?> TryGetSessionAsync(HttpContext httpContext, CancellationToken cancellationToken = default)
+    public async Task<SqlOSIssuerSession?> TryGetSessionAsync(HttpContext httpContext, CancellationToken cancellationToken = default)
     {
         var rawToken = httpContext.Request.Cookies[CookieName];
         if (string.IsNullOrWhiteSpace(rawToken))
@@ -37,7 +37,7 @@ public sealed class SqlOSAuthPageSessionService
             return null;
         }
 
-        var token = await _cryptoService.FindTemporaryTokenAsync(SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose, rawToken, cancellationToken);
+        var token = await _cryptoService.FindTemporaryTokenAsync(SqlOSAuthLifecyclePolicy.IssuerSessionPurpose, rawToken, cancellationToken);
         if (token?.UserId == null)
         {
             return null;
@@ -83,11 +83,11 @@ public sealed class SqlOSAuthPageSessionService
             return null;
         }
 
-        var payload = _cryptoService.DeserializePayload<AuthPageSessionPayload>(token);
+        var payload = _cryptoService.DeserializePayload<IssuerSessionPayload>(token);
         var authenticatedAt = payload is { AuthenticatedAt: var stamped } && stamped != default
             ? stamped
             : token.CreatedAt;
-        return new SqlOSAuthPageSession(
+        return new SqlOSIssuerSession(
             rawToken,
             user,
             token.OrganizationId,
@@ -149,16 +149,16 @@ public sealed class SqlOSAuthPageSessionService
         var family = await ResolveFamilyForSignInAsync(httpContext, user.Id, organizationId, continueExistingSession, cancellationToken);
         var securitySettings = await _settingsService.GetResolvedSecuritySettingsAsync(cancellationToken);
         var rawToken = await _cryptoService.CreateTemporaryTokenAsync(
-            SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose,
+            SqlOSAuthLifecyclePolicy.IssuerSessionPurpose,
             user.Id,
             null,
             organizationId,
-            new AuthPageSessionPayload(authenticationMethod, authenticatedAt ?? DateTime.UtcNow),
+            new IssuerSessionPayload(authenticationMethod, authenticatedAt ?? DateTime.UtcNow),
             securitySettings.SessionIdleTimeout,
             cancellationToken,
             family.Id);
 
-        var revokedAt = await _context.Set<SqlOSAuthPageSessionFamily>()
+        var revokedAt = await _context.Set<SqlOSIssuerSessionFamily>()
             .AsNoTracking()
             .Where(x => x.Id == family.Id)
             .Select(x => x.RevokedAt)
@@ -166,7 +166,7 @@ public sealed class SqlOSAuthPageSessionService
         if (revokedAt != null)
         {
             await _cryptoService.ConsumeTemporaryTokenAsync(
-                SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose,
+                SqlOSAuthLifecyclePolicy.IssuerSessionPurpose,
                 rawToken,
                 cancellationToken);
             throw new InvalidOperationException(SessionNoLongerActiveMessage);
@@ -193,9 +193,9 @@ public sealed class SqlOSAuthPageSessionService
             if (token != null)
             {
                 var now = DateTime.UtcNow;
-                if (!string.IsNullOrWhiteSpace(token.AuthPageSessionFamilyId))
+                if (!string.IsNullOrWhiteSpace(token.IssuerSessionFamilyId))
                 {
-                    await RevokeFamilyAsync(token.AuthPageSessionFamilyId, LogoutReason, now, cancellationToken);
+                    await RevokeFamilyAsync(token.IssuerSessionFamilyId, LogoutReason, now, cancellationToken);
                 }
                 else
                 {
@@ -221,7 +221,7 @@ public sealed class SqlOSAuthPageSessionService
         if (httpContext.Items[FamilyItemKey] is string issuedFamilyId
             && !string.IsNullOrWhiteSpace(issuedFamilyId))
         {
-            var issuedFamily = await _context.Set<SqlOSAuthPageSessionFamily>()
+            var issuedFamily = await _context.Set<SqlOSIssuerSessionFamily>()
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == issuedFamilyId, cancellationToken);
             return issuedFamily is { RevokedAt: null };
@@ -234,18 +234,18 @@ public sealed class SqlOSAuthPageSessionService
         }
 
         var token = await FindAuthPageTokenByRawAsync(rawToken, unconsumedOnly: false, cancellationToken);
-        if (token == null || string.IsNullOrWhiteSpace(token.AuthPageSessionFamilyId))
+        if (token == null || string.IsNullOrWhiteSpace(token.IssuerSessionFamilyId))
         {
             return false;
         }
 
-        var family = await _context.Set<SqlOSAuthPageSessionFamily>()
+        var family = await _context.Set<SqlOSIssuerSessionFamily>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == token.AuthPageSessionFamilyId, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == token.IssuerSessionFamilyId, cancellationToken);
         return family is { RevokedAt: null };
     }
 
-    private async Task<SqlOSAuthPageSessionFamily> ResolveFamilyForSignInAsync(
+    private async Task<SqlOSIssuerSessionFamily> ResolveFamilyForSignInAsync(
         HttpContext httpContext,
         string userId,
         string? organizationId,
@@ -255,7 +255,7 @@ public sealed class SqlOSAuthPageSessionService
         if (httpContext.Items[FamilyItemKey] is string issuedFamilyId
             && !string.IsNullOrWhiteSpace(issuedFamilyId))
         {
-            var issuedFamily = await _context.Set<SqlOSAuthPageSessionFamily>()
+            var issuedFamily = await _context.Set<SqlOSIssuerSessionFamily>()
                 .FirstOrDefaultAsync(x => x.Id == issuedFamilyId, cancellationToken);
             if (issuedFamily != null && issuedFamily.RevokedAt == null)
             {
@@ -274,7 +274,7 @@ public sealed class SqlOSAuthPageSessionService
             var presenting = await FindAuthPageTokenByRawAsync(rawToken, unconsumedOnly: true, cancellationToken);
             if (presenting != null)
             {
-                if (string.IsNullOrWhiteSpace(presenting.AuthPageSessionFamilyId))
+                if (string.IsNullOrWhiteSpace(presenting.IssuerSessionFamilyId))
                 {
                     await ConsumeLegacyUnlinkedAsync(presenting, DateTime.UtcNow, cancellationToken);
                     if (continueExistingSession)
@@ -284,8 +284,8 @@ public sealed class SqlOSAuthPageSessionService
                 }
                 else
                 {
-                    var existing = await _context.Set<SqlOSAuthPageSessionFamily>()
-                        .FirstOrDefaultAsync(x => x.Id == presenting.AuthPageSessionFamilyId, cancellationToken);
+                    var existing = await _context.Set<SqlOSIssuerSessionFamily>()
+                        .FirstOrDefaultAsync(x => x.Id == presenting.IssuerSessionFamilyId, cancellationToken);
                     if (existing == null || existing.RevokedAt != null)
                     {
                         if (continueExistingSession)
@@ -309,29 +309,29 @@ public sealed class SqlOSAuthPageSessionService
             }
         }
 
-        var family = new SqlOSAuthPageSessionFamily
+        var family = new SqlOSIssuerSessionFamily
         {
             Id = _cryptoService.GenerateId("aps"),
             UserId = userId,
             OrganizationId = organizationId,
             CreatedAt = DateTime.UtcNow
         };
-        _context.Set<SqlOSAuthPageSessionFamily>().Add(family);
+        _context.Set<SqlOSIssuerSessionFamily>().Add(family);
         await _context.SaveChangesAsync(cancellationToken);
         return family;
     }
 
     private async Task<bool> EnsureFamilyIsReusableAsync(SqlOSTemporaryToken token, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(token.AuthPageSessionFamilyId))
+        if (string.IsNullOrWhiteSpace(token.IssuerSessionFamilyId))
         {
             await ConsumePresentingTokenAsync(token, cancellationToken);
             return false;
         }
 
-        var family = await _context.Set<SqlOSAuthPageSessionFamily>()
+        var family = await _context.Set<SqlOSIssuerSessionFamily>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == token.AuthPageSessionFamilyId, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == token.IssuerSessionFamilyId, cancellationToken);
         if (family == null || family.RevokedAt != null)
         {
             await ConsumePresentingTokenAsync(token, cancellationToken);
@@ -347,7 +347,7 @@ public sealed class SqlOSAuthPageSessionService
         DateTime now,
         CancellationToken cancellationToken)
     {
-        var family = await _context.Set<SqlOSAuthPageSessionFamily>()
+        var family = await _context.Set<SqlOSIssuerSessionFamily>()
             .FirstOrDefaultAsync(x => x.Id == familyId, cancellationToken);
         if (family != null && family.RevokedAt == null)
         {
@@ -367,8 +367,8 @@ public sealed class SqlOSAuthPageSessionService
         }
 
         var tokens = await _context.Set<SqlOSTemporaryToken>()
-            .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose
-                && x.AuthPageSessionFamilyId == familyId
+            .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.IssuerSessionPurpose
+                && x.IssuerSessionFamilyId == familyId
                 && x.ConsumedAt == null)
             .ToListAsync(cancellationToken);
         if (tokens.Count == 0)
@@ -400,9 +400,9 @@ public sealed class SqlOSAuthPageSessionService
         CancellationToken cancellationToken)
     {
         var unlinked = await _context.Set<SqlOSTemporaryToken>()
-            .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose
+            .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.IssuerSessionPurpose
                 && x.ConsumedAt == null
-                && x.AuthPageSessionFamilyId == null
+                && x.IssuerSessionFamilyId == null
                 && x.UserId == presenting.UserId)
             .ToListAsync(cancellationToken);
         foreach (var token in unlinked)
@@ -444,7 +444,7 @@ public sealed class SqlOSAuthPageSessionService
     {
         var hash = _cryptoService.HashToken(rawToken);
         var query = _context.Set<SqlOSTemporaryToken>()
-            .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose && x.TokenHash == hash);
+            .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.IssuerSessionPurpose && x.TokenHash == hash);
         if (unconsumedOnly)
         {
             var now = DateTime.UtcNow;
@@ -457,10 +457,10 @@ public sealed class SqlOSAuthPageSessionService
     // AuthenticatedAt defaults so cookies minted before the field existed still
     // deserialize; a default value means "unknown" and falls back to the
     // temporary token's CreatedAt.
-    private sealed record AuthPageSessionPayload(string AuthenticationMethod, DateTime AuthenticatedAt = default);
+    private sealed record IssuerSessionPayload(string AuthenticationMethod, DateTime AuthenticatedAt = default);
 }
 
-public sealed record SqlOSAuthPageSession(
+public sealed record SqlOSIssuerSession(
     string RawToken,
     SqlOSUser User,
     string? OrganizationId,

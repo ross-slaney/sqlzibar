@@ -14,7 +14,7 @@ public static partial class EndpointRouteBuilderExtensions
             HttpContext context,
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSAuthService authService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             CancellationToken cancellationToken) =>
         {
             var form = await context.Request.ReadFormAsync(cancellationToken);
@@ -31,7 +31,7 @@ public static partial class EndpointRouteBuilderExtensions
                     authorizationRequest.Id,
                     context,
                     cancellationToken);
-                var session = await authPageSessionService.TryGetSessionAsync(context, cancellationToken);
+                var session = await issuerSessionService.TryGetSessionAsync(context, cancellationToken);
                 return await RenderHostedAuthorizationCompletionAsync(
                     completion,
                     authorizationRequest,

@@ -655,7 +655,7 @@ public static class SqlOSAuthServerModelConfiguration
             entity.Property(x => x.CustodyProvider).HasMaxLength(120);
         });
 
-        modelBuilder.Entity<SqlOSAuthPageSessionFamily>(entity =>
+        modelBuilder.Entity<SqlOSIssuerSessionFamily>(entity =>
         {
             entity.ToTable("SqlOSAuthPageSessionFamilies", schema, t => t.ExcludeFromMigrations());
             entity.HasKey(x => x.Id);
@@ -663,7 +663,7 @@ public static class SqlOSAuthServerModelConfiguration
             entity.HasIndex(x => new { x.OrganizationId, x.RevokedAt });
             entity.Property(x => x.OrganizationId).HasMaxLength(64);
             entity.Property(x => x.RevocationReason).HasMaxLength(200);
-            // Family revocation is the AuthPage-session lock. A renewal that
+            // Family revocation is the issuer-session lock. A renewal that
             // loaded an active family must fail closed if logout or lifecycle
             // revocation commits before the successor cookie is accepted.
             entity.Property(x => x.RevokedAt).IsConcurrencyToken();
@@ -682,14 +682,18 @@ public static class SqlOSAuthServerModelConfiguration
             entity.ToTable("SqlOSTemporaryTokens", schema, t => t.ExcludeFromMigrations());
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.TokenHash).IsUnique();
-            entity.HasIndex(x => x.AuthPageSessionFamilyId);
+            entity.HasIndex(x => x.IssuerSessionFamilyId);
             entity.Property(x => x.Purpose).HasMaxLength(80);
-            entity.Property(x => x.AuthPageSessionFamilyId).HasMaxLength(64);
+            // Persisted column keeps the pre-rename name; schema 045 created it
+            // and a rename-only migration would add upgrade risk for no behavior.
+            entity.Property(x => x.IssuerSessionFamilyId)
+                .HasColumnName("AuthPageSessionFamilyId")
+                .HasMaxLength(64);
             entity.Property(x => x.ConsumedAt).IsConcurrencyToken();
             entity.Property(x => x.PayloadJson).IsConcurrencyToken();
-            entity.HasOne(x => x.AuthPageSessionFamily)
+            entity.HasOne(x => x.IssuerSessionFamily)
                 .WithMany(x => x.TemporaryTokens)
-                .HasForeignKey(x => x.AuthPageSessionFamilyId)
+                .HasForeignKey(x => x.IssuerSessionFamilyId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

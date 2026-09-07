@@ -9,7 +9,7 @@ public sealed record SqlOSOpenIdScopeWarning(string Code, string Message);
 /// SqlOS issues an <c>id_token</c> only when OpenID Provider mode is enabled and
 /// <c>openid</c> is granted; these warnings explain why a client or sign-in will
 /// not receive one and record that <c>openid</c> is never always-allowed.
-/// Shared by admin, dashboard, hosted AuthPage, and headless so the rule is not
+/// Shared by admin, dashboard, hosted IssuerSession, and headless so the rule is not
 /// reimplemented in JavaScript.
 /// </summary>
 public static class SqlOSOpenIdScopeWarnings

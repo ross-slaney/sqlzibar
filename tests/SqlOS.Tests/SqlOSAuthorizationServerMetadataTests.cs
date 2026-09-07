@@ -395,7 +395,7 @@ public sealed class SqlOSAuthorizationServerMetadataTests
         var crypto = TestCryptoService.Create(context, options);
         var admin = new SqlOSAdminService(context, options, crypto);
         var settings = new SqlOSSettingsService(context, options, emailSender);
-        var authPageSessionService = new SqlOSAuthPageSessionService(context, crypto, settings);
+        var issuerSessionService = new SqlOSIssuerSessionService(context, crypto, settings);
         var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
         var authService = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp);
 
@@ -412,7 +412,7 @@ public sealed class SqlOSAuthorizationServerMetadataTests
             authService,
             crypto,
             settings,
-            authPageSessionService,
+            issuerSessionService,
             options);
     }
 

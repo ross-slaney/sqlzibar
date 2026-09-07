@@ -111,4 +111,4 @@ This is the local downstream client for the Emcy-hosted Todo MCP demo. The Todo 
 
 ## Headless session reuse
 
-If your headless frontend runs on a different origin than the SqlOS host, use credentialed browser requests to the SqlOS headless endpoints so SqlOS can persist its reusable auth-page session cookie. Follow-up `/sqlos/auth/authorize?prompt=none` requests should then silently complete when that session exists, or return `login_required` when it does not.
+If your headless frontend runs on a different origin than the SqlOS host, use credentialed browser requests to the SqlOS headless endpoints so SqlOS can persist its reusable issuer session cookie. Follow-up `/sqlos/auth/authorize?prompt=none` requests should then silently complete when that session exists, or return `login_required` when it does not.

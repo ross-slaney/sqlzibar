@@ -756,7 +756,7 @@ public sealed class HeadlessAuthIntegrationTests
     }
 
     [TestMethod]
-    public async Task SignUpAsync_EstablishesReusableAuthPageSession()
+    public async Task SignUpAsync_EstablishesReusableIssuerSession()
     {
         await using var fixture = await CreateFixtureAsync();
 
@@ -789,13 +789,13 @@ public sealed class HeadlessAuthIntegrationTests
                 new JsonObject()));
 
         result.Type.Should().Be("redirect");
-        var authPageCookie = ExtractCookieValue(httpContext.Response.Headers.SetCookie.ToString(), "sqlos_auth_page");
-        authPageCookie.Should().NotBeNullOrWhiteSpace();
+        var issuerSessionCookie = ExtractCookieValue(httpContext.Response.Headers.SetCookie.ToString(), "sqlos_auth_page");
+        issuerSessionCookie.Should().NotBeNullOrWhiteSpace();
 
         var followOnContext = CreateHttpContext();
-        followOnContext.Request.Headers.Cookie = $"sqlos_auth_page={authPageCookie}";
+        followOnContext.Request.Headers.Cookie = $"sqlos_auth_page={issuerSessionCookie}";
 
-        var session = await fixture.AuthPageSessionService.TryGetSessionAsync(followOnContext);
+        var session = await fixture.IssuerSessionService.TryGetSessionAsync(followOnContext);
         session.Should().NotBeNull();
         session!.User.Id.Should().NotBeNullOrWhiteSpace();
         session.AuthenticationMethod.Should().Be("password");
@@ -906,7 +906,7 @@ public sealed class HeadlessAuthIntegrationTests
         var admin = new SqlOSAdminService(context, options, crypto);
         var emailSender = new TestAuthEmailSender { IsConfigured = true };
         var settings = new SqlOSSettingsService(context, options, emailSender);
-        var authPageSessionService = new SqlOSAuthPageSessionService(context, crypto, settings);
+        var issuerSessionService = new SqlOSIssuerSessionService(context, crypto, settings);
         var transactionalEmailService = new SqlOSTransactionalEmailService(
             context,
             crypto,
@@ -932,7 +932,7 @@ public sealed class HeadlessAuthIntegrationTests
             authService,
             crypto,
             settings,
-            authPageSessionService,
+            issuerSessionService,
             options,
             invitationService,
             passwordAbuse);
@@ -970,7 +970,7 @@ public sealed class HeadlessAuthIntegrationTests
         await settings.UpsertSeededAuthEmailSettingsAsync();
         await new SqlOSEmailAdminService(context, crypto, new SqlOSEmailTemplateRenderer()).EnsureBuiltInTemplatesAsync();
 
-        return new HeadlessFixture(context, clientId, redirectUri, admin, authService, authorizationServerService, headlessAuthService, authPageSessionService, emailSender, invitationService);
+        return new HeadlessFixture(context, clientId, redirectUri, admin, authService, authorizationServerService, headlessAuthService, issuerSessionService, emailSender, invitationService);
     }
 
     private static TestSqlOSDbContext CreateContext()
@@ -1071,7 +1071,7 @@ public sealed class HeadlessAuthIntegrationTests
         SqlOSAuthService AuthService,
         SqlOSAuthorizationServerService AuthorizationServerService,
         SqlOSHeadlessAuthService HeadlessAuthService,
-        SqlOSAuthPageSessionService AuthPageSessionService,
+        SqlOSIssuerSessionService IssuerSessionService,
         TestAuthEmailSender EmailSender,
         SqlOSInvitationService InvitationService) : IAsyncDisposable
     {

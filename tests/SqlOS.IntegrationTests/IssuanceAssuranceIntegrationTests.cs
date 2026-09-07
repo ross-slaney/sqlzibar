@@ -169,14 +169,14 @@ public sealed class IssuanceAssuranceIntegrationTests
                 emailOtp,
                 mfaPolicyService: mfaPolicy,
                 totpMfaService: totp);
-            var authPage = new SqlOSAuthPageSessionService(context, crypto, settings);
+            var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
             var authorization = new SqlOSAuthorizationServerService(
                 context,
                 admin,
                 auth,
                 crypto,
                 settings,
-                authPage,
+                issuerSession,
                 options,
                 mfaPolicyService: mfaPolicy,
                 totpMfaService: totp);

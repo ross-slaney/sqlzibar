@@ -46,7 +46,7 @@ public sealed class AuthPageCsrfIntegrationTests
 
         rejected.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         rejected.Headers.TryGetValues("Set-Cookie", out var rejectedCookies).Should().BeFalse();
-        (await server.CountAuthPageSessionsAsync()).Should().Be(0);
+        (await server.CountIssuerSessionsAsync()).Should().Be(0);
 
         var authorize = await client.GetAsync(
             "/sqlos/auth/authorize?response_type=code&client_id=browser-client"
@@ -54,7 +54,7 @@ public sealed class AuthPageCsrfIntegrationTests
             + "&scope=openid%20profile%20email&state=victim-state"
             + "&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256");
         authorize.StatusCode.Should().Be(HttpStatusCode.OK);
-        authorize.Headers.Location.Should().BeNull("the attacker login must not create a reusable AuthPage session");
+        authorize.Headers.Location.Should().BeNull("the attacker login must not create a reusable issuer session");
         (await authorize.Content.ReadAsStringAsync()).Should().Contain("/sqlos/auth/login/identify");
     }
 
@@ -86,13 +86,13 @@ public sealed class AuthPageCsrfIntegrationTests
 
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         response.Headers.Location.Should().Be(new Uri("/sqlos/auth/login?status=signed-in", UriKind.Relative));
-        var authPageCookie = ExtractCookie(response, "sqlos_auth_page=");
-        authPageCookie.Should().NotContain(antiforgeryCookie.Split('=', 2)[1]);
+        var issuerSessionCookie = ExtractCookie(response, "sqlos_auth_page=");
+        issuerSessionCookie.Should().NotContain(antiforgeryCookie.Split('=', 2)[1]);
 
         await using var scope = server.App.Services.CreateAsyncScope();
-        var sessionService = scope.ServiceProvider.GetRequiredService<SqlOSAuthPageSessionService>();
+        var sessionService = scope.ServiceProvider.GetRequiredService<SqlOSIssuerSessionService>();
         var sessionContext = new DefaultHttpContext();
-        sessionContext.Request.Headers.Cookie = authPageCookie;
+        sessionContext.Request.Headers.Cookie = issuerSessionCookie;
         var session = await sessionService.TryGetSessionAsync(sessionContext);
         session.Should().NotBeNull();
         session!.User.Id.Should().Be(server.UserId);
@@ -126,7 +126,7 @@ public sealed class AuthPageCsrfIntegrationTests
         var response = await client.SendAsync(login);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await server.CountAuthPageSessionsAsync()).Should().Be(0);
+        (await server.CountIssuerSessionsAsync()).Should().Be(0);
     }
 
     [TestMethod]
@@ -252,7 +252,7 @@ public sealed class AuthPageCsrfIntegrationTests
             };
         }
 
-        public async Task<int> CountAuthPageSessionsAsync()
+        public async Task<int> CountIssuerSessionsAsync()
         {
             await using var scope = App.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<TestSqlOSDbContext>()

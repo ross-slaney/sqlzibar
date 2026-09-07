@@ -157,7 +157,7 @@ public static partial class EndpointRouteBuilderExtensions
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSEmailOtpService emailOtpService,
             SqlOSAuthService authService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSInvitationService invitationService,
             CancellationToken cancellationToken) =>
         {
@@ -193,7 +193,7 @@ public static partial class EndpointRouteBuilderExtensions
                         organizationId = acceptance.OrganizationId;
                     }
 
-                    await authPageSessionService.SignInAsync(
+                    await issuerSessionService.SignInAsync(
                         context,
                         verification.User,
                         organizationId,

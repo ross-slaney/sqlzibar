@@ -259,14 +259,14 @@ public sealed class OidcAuthIntegrationTests
         var settings = new SqlOSSettingsService(AspireFixture.SharedContext, options, emailSender);
         var emailOtp = new SqlOSEmailOtpService(AspireFixture.SharedContext, admin, crypto, settings, emailSender, options);
         var auth = new SqlOSAuthService(AspireFixture.SharedContext, options, admin, crypto, settings, emailOtp);
-        var authPageSession = new SqlOSAuthPageSessionService(AspireFixture.SharedContext, crypto, settings);
+        var issuerSession = new SqlOSIssuerSessionService(AspireFixture.SharedContext, crypto, settings);
         var authorization = new SqlOSAuthorizationServerService(
             AspireFixture.SharedContext,
             admin,
             auth,
             crypto,
             settings,
-            authPageSession,
+            issuerSession,
             options);
         var oidc = new SqlOSOidcAuthService(
             AspireFixture.SharedContext,

@@ -159,7 +159,7 @@ public static partial class EndpointRouteBuilderExtensions
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSHeadlessAuthService headlessAuthService,
             SqlOSAuthService authService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSInvitationService invitationService,
             CancellationToken cancellationToken) =>
             HandleAuthorizeAsync(
@@ -169,7 +169,7 @@ public static partial class EndpointRouteBuilderExtensions
                 authorizationServerService,
                 headlessAuthService,
                 authService,
-                authPageSessionService,
+                issuerSessionService,
                 invitationService,
                 cancellationToken));
 
@@ -184,7 +184,7 @@ public static partial class EndpointRouteBuilderExtensions
             SqlOSAuthorizationServerService authorizationServerService,
             SqlOSHeadlessAuthService headlessAuthService,
             SqlOSAuthService authService,
-            SqlOSAuthPageSessionService authPageSessionService,
+            SqlOSIssuerSessionService issuerSessionService,
             SqlOSInvitationService invitationService,
             CancellationToken cancellationToken) =>
         {
@@ -198,7 +198,7 @@ public static partial class EndpointRouteBuilderExtensions
                 authorizationServerService,
                 headlessAuthService,
                 authService,
-                authPageSessionService,
+                issuerSessionService,
                 invitationService,
                 cancellationToken);
         });
@@ -211,7 +211,7 @@ public static partial class EndpointRouteBuilderExtensions
         SqlOSAuthorizationServerService authorizationServerService,
         SqlOSHeadlessAuthService headlessAuthService,
         SqlOSAuthService authService,
-        SqlOSAuthPageSessionService authPageSessionService,
+        SqlOSIssuerSessionService issuerSessionService,
         SqlOSInvitationService invitationService,
         CancellationToken cancellationToken)
     {
@@ -231,7 +231,7 @@ public static partial class EndpointRouteBuilderExtensions
                 || promptValues.Contains("select_account", StringComparer.Ordinal);
             if (promptForcesLogin)
             {
-                await authPageSessionService.SignOutAsync(context, cancellationToken);
+                await issuerSessionService.SignOutAsync(context, cancellationToken);
             }
 
             var input = new SqlOSAuthorizeRequestInput(
@@ -300,7 +300,7 @@ public static partial class EndpointRouteBuilderExtensions
                 _ => "login"
             };
 
-            var existingSession = await authPageSessionService.TryGetSessionAsync(context, cancellationToken);
+            var existingSession = await issuerSessionService.TryGetSessionAsync(context, cancellationToken);
             // TotalSeconds avoids the OverflowException TimeSpan.FromSeconds
             // would throw for max_age values near long.MaxValue.
             if (existingSession != null
@@ -317,7 +317,7 @@ public static partial class EndpointRouteBuilderExtensions
                         cancellationToken));
                 }
 
-                await authPageSessionService.SignOutAsync(context, cancellationToken);
+                await issuerSessionService.SignOutAsync(context, cancellationToken);
                 existingSession = null;
             }
 
@@ -339,7 +339,7 @@ public static partial class EndpointRouteBuilderExtensions
                 }
                 catch (InvalidOperationException ex) when (string.Equals(
                     ex.Message,
-                    SqlOSAuthPageSessionService.SessionNoLongerActiveMessage,
+                    SqlOSIssuerSessionService.SessionNoLongerActiveMessage,
                     StringComparison.Ordinal))
                 {
                     if (promptRequestsNone)

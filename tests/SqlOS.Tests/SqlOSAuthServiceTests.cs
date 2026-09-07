@@ -3297,14 +3297,14 @@ public sealed class SqlOSAuthServiceTests
                 transactionalEmailService: transactionalEmailService,
                 mfaPolicyService: mfaPolicy,
                 totpMfaService: totp);
-            var authPageSession = new SqlOSAuthPageSessionService(context, crypto, settings);
+            var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
             var authorization = new SqlOSAuthorizationServerService(
                 context,
                 admin,
                 auth,
                 crypto,
                 settings,
-                authPageSession,
+                issuerSession,
                 options,
                 invitationService: invitation,
                 passwordLoginAbuseService: passwordAbuse,

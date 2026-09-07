@@ -124,7 +124,7 @@ public sealed class SqlOSDeviceAuthorizationServiceTests
     }
 
     [TestMethod]
-    public async Task ApproveAsync_CarriesAuthPageSessionAuthTime_IntoIssuedSession()
+    public async Task ApproveAsync_CarriesIssuerSessionAuthTime_IntoIssuedSession()
     {
         await using var harness = await Harness.CreateAsync();
         var user = await harness.SeedUserAsync();
@@ -137,7 +137,7 @@ public sealed class SqlOSDeviceAuthorizationServiceTests
         var originalAuthenticatedAt = DateTime.UtcNow.AddHours(-2);
         var signIn = new DefaultHttpContext();
         signIn.Request.Scheme = "https";
-        await harness.AuthPage.SignInAsync(signIn, user, organizationId: null, "password", originalAuthenticatedAt);
+        await harness.IssuerSession.SignInAsync(signIn, user, organizationId: null, "password", originalAuthenticatedAt);
         harness.Http.Request.Headers.Cookie = signIn.Response.Headers.SetCookie.ToString().Split(';', 2)[0];
 
         var resolved = await harness.Device.ApproveAsync(
@@ -163,7 +163,7 @@ public sealed class SqlOSDeviceAuthorizationServiceTests
     }
 
     [TestMethod]
-    public async Task ApproveAsync_WithoutAuthPageSession_StampsFreshAuthTime()
+    public async Task ApproveAsync_WithoutIssuerSession_StampsFreshAuthTime()
     {
         await using var harness = await Harness.CreateAsync();
         var user = await harness.SeedUserAsync();
@@ -218,14 +218,14 @@ public sealed class SqlOSDeviceAuthorizationServiceTests
             TestSqlOSInMemoryDbContext context,
             SqlOSDeviceAuthorizationService device,
             SqlOSAuthorizationServerService authorization,
-            SqlOSAuthPageSessionService authPage,
+            SqlOSIssuerSessionService issuerSession,
             SqlOSCryptoService crypto,
             DefaultHttpContext http)
         {
             Context = context;
             Device = device;
             Authorization = authorization;
-            AuthPage = authPage;
+            IssuerSession = issuerSession;
             _crypto = crypto;
             Http = http;
         }
@@ -233,7 +233,7 @@ public sealed class SqlOSDeviceAuthorizationServiceTests
         public TestSqlOSInMemoryDbContext Context { get; }
         public SqlOSDeviceAuthorizationService Device { get; }
         public SqlOSAuthorizationServerService Authorization { get; }
-        public SqlOSAuthPageSessionService AuthPage { get; }
+        public SqlOSIssuerSessionService IssuerSession { get; }
         public DefaultHttpContext Http { get; }
         public SqlOSCryptoService Crypto => _crypto;
 
@@ -258,12 +258,12 @@ public sealed class SqlOSDeviceAuthorizationServiceTests
             var admin = new SqlOSAdminService(context, options, crypto);
             var emailSender = new TestAuthEmailSender();
             var settings = new SqlOSSettingsService(context, options, emailSender);
-            var authPageSession = new SqlOSAuthPageSessionService(context, crypto, settings);
+            var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
             var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
             var mfaPolicy = new SqlOSMfaPolicyService(context, settings, options);
             var auth = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp, mfaPolicyService: mfaPolicy);
-            var device = new SqlOSDeviceAuthorizationService(context, admin, auth, crypto, options, mfaPolicy, authPageSession);
-            var authorization = new SqlOSAuthorizationServerService(context, admin, auth, crypto, settings, authPageSession, options, mfaPolicyService: mfaPolicy);
+            var device = new SqlOSDeviceAuthorizationService(context, admin, auth, crypto, options, mfaPolicy, issuerSession);
+            var authorization = new SqlOSAuthorizationServerService(context, admin, auth, crypto, settings, issuerSession, options, mfaPolicyService: mfaPolicy);
             var http = new DefaultHttpContext();
             http.Request.Scheme = "https";
             http.Request.Host = new HostString("auth.example.com");
@@ -273,7 +273,7 @@ public sealed class SqlOSDeviceAuthorizationServiceTests
             await settings.EnsureDefaultMfaSettingsAsync();
             await admin.UpsertSeededClientsAsync();
 
-            return new Harness(context, device, authorization, authPageSession, crypto, http);
+            return new Harness(context, device, authorization, issuerSession, crypto, http);
         }
 
         public async Task<SqlOSUser> SeedUserAsync()

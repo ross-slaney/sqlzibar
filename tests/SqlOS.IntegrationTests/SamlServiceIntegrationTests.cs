@@ -1580,8 +1580,8 @@ public sealed class SamlServiceIntegrationTests
         var settings = new SqlOSSettingsService(context, options, emailSender);
         var emailOtp = new SqlOSEmailOtpService(context, admin, crypto, settings, emailSender, options);
         var auth = new SqlOSAuthService(context, options, admin, crypto, settings, emailOtp);
-        var authPage = new SqlOSAuthPageSessionService(context, crypto, settings);
-        var authorization = new SqlOSAuthorizationServerService(context, admin, auth, crypto, settings, authPage, options);
+        var issuerSession = new SqlOSIssuerSessionService(context, crypto, settings);
+        var authorization = new SqlOSAuthorizationServerService(context, admin, auth, crypto, settings, issuerSession, options);
         return new SqlOSSamlService(context, options, admin, crypto, authorization);
     }
 

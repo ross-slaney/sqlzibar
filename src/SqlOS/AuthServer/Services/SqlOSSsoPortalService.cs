@@ -652,17 +652,17 @@ public sealed class SqlOSSsoPortalService
             : await _context.Set<SqlOSRefreshToken>()
                 .Where(x => sessionIds.Contains(x.SessionId) && x.RevokedAt == null)
                 .ToListAsync(cancellationToken);
-        var authPageSessions = eligibleUserIds.Count == 0
+        var issuerSessions = eligibleUserIds.Count == 0
             ? []
             : await _context.Set<SqlOSTemporaryToken>()
-                .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose
+                .Where(x => x.Purpose == SqlOSAuthLifecyclePolicy.IssuerSessionPurpose
                     && x.OrganizationId == session.OrganizationId
                     && x.ConsumedAt == null
                     && eligibleUserIds.Contains(x.UserId!))
                 .ToListAsync(cancellationToken);
-        var authPageFamilies = eligibleUserIds.Count == 0
+        var issuerSessionFamilies = eligibleUserIds.Count == 0
             ? []
-            : await _context.Set<SqlOSAuthPageSessionFamily>()
+            : await _context.Set<SqlOSIssuerSessionFamily>()
                 .Where(x => x.RevokedAt == null
                     && x.OrganizationId == session.OrganizationId
                     && eligibleUserIds.Contains(x.UserId))
@@ -679,15 +679,15 @@ public sealed class SqlOSSsoPortalService
             refreshToken.RevokedAt = now;
         }
 
-        foreach (var authPageSession in authPageSessions)
+        foreach (var issuerSession in issuerSessions)
         {
-            authPageSession.ConsumedAt = now;
+            issuerSession.ConsumedAt = now;
         }
 
-        foreach (var authPageFamily in authPageFamilies)
+        foreach (var issuerSessionFamily in issuerSessionFamilies)
         {
-            authPageFamily.RevokedAt = now;
-            authPageFamily.RevocationReason = "sso_required";
+            issuerSessionFamily.RevokedAt = now;
+            issuerSessionFamily.RevocationReason = "sso_required";
         }
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -700,7 +700,7 @@ public sealed class SqlOSSsoPortalService
                 connectionId = connection.Id,
                 domain = domain.Domain,
                 revokedSessions = sessions.Count,
-                invalidatedAuthPageSessions = authPageSessions.Count
+                invalidatedAuthPageSessions = issuerSessions.Count
             },
             cancellationToken);
 

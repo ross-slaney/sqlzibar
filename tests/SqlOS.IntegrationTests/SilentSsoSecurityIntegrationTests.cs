@@ -37,7 +37,7 @@ public sealed class SilentSsoSecurityIntegrationTests
             var admin = scope.ServiceProvider.GetRequiredService<SqlOSAdminService>();
             var auth = scope.ServiceProvider.GetRequiredService<SqlOSAuthService>();
             var totp = scope.ServiceProvider.GetRequiredService<SqlOSTotpMfaService>();
-            var authPageSession = scope.ServiceProvider.GetRequiredService<SqlOSAuthPageSessionService>();
+            var issuerSession = scope.ServiceProvider.GetRequiredService<SqlOSIssuerSessionService>();
             var user = await admin.CreateUserAsync(new SqlOSCreateUserRequest(
                 "Silent MFA User",
                 $"silent-mfa-{Guid.NewGuid():N}@example.com",
@@ -47,7 +47,7 @@ public sealed class SilentSsoSecurityIntegrationTests
             await auth.VerifyTotpEnrollmentAsync(new SqlOSTotpEnrollmentVerifyRequest(
                 enrollment.EnrollmentToken,
                 totp.GenerateCodeForTesting(enrollment.Secret)));
-            cookie = await CreateSessionCookieAsync(authPageSession, user, organizationId: null, "password");
+            cookie = await CreateSessionCookieAsync(issuerSession, user, organizationId: null, "password");
         }
 
         using var client = server.App.GetTestClient();
@@ -97,7 +97,7 @@ public sealed class SilentSsoSecurityIntegrationTests
             var admin = scope.ServiceProvider.GetRequiredService<SqlOSAdminService>();
             var auth = scope.ServiceProvider.GetRequiredService<SqlOSAuthService>();
             var totp = scope.ServiceProvider.GetRequiredService<SqlOSTotpMfaService>();
-            var authPageSession = scope.ServiceProvider.GetRequiredService<SqlOSAuthPageSessionService>();
+            var issuerSession = scope.ServiceProvider.GetRequiredService<SqlOSIssuerSessionService>();
             var user = await admin.CreateUserAsync(new SqlOSCreateUserRequest(
                 "Hosted Silent MFA User",
                 $"hosted-silent-mfa-{Guid.NewGuid():N}@example.com",
@@ -107,7 +107,7 @@ public sealed class SilentSsoSecurityIntegrationTests
             await auth.VerifyTotpEnrollmentAsync(new SqlOSTotpEnrollmentVerifyRequest(
                 enrollment.EnrollmentToken,
                 totp.GenerateCodeForTesting(enrollment.Secret)));
-            cookie = await CreateSessionCookieAsync(authPageSession, user, organizationId: null, "password");
+            cookie = await CreateSessionCookieAsync(issuerSession, user, organizationId: null, "password");
         }
 
         using var client = server.App.GetTestClient();
@@ -135,12 +135,12 @@ public sealed class SilentSsoSecurityIntegrationTests
         await using (var scope = server.App.Services.CreateAsyncScope())
         {
             var admin = scope.ServiceProvider.GetRequiredService<SqlOSAdminService>();
-            var authPageSession = scope.ServiceProvider.GetRequiredService<SqlOSAuthPageSessionService>();
+            var issuerSession = scope.ServiceProvider.GetRequiredService<SqlOSIssuerSessionService>();
             var user = await admin.CreateUserAsync(new SqlOSCreateUserRequest(
                 "Third Party Session User",
                 $"third-party-session-{Guid.NewGuid():N}@example.com",
                 "P@ssword123!"));
-            cookie = await CreateSessionCookieAsync(authPageSession, user, organizationId: null, "password");
+            cookie = await CreateSessionCookieAsync(issuerSession, user, organizationId: null, "password");
         }
 
         using var client = server.App.GetTestClient();
@@ -230,7 +230,7 @@ public sealed class SilentSsoSecurityIntegrationTests
     }
 
     private static async Task<string> CreateSessionCookieAsync(
-        SqlOSAuthPageSessionService sessionService,
+        SqlOSIssuerSessionService sessionService,
         SqlOSUser user,
         string? organizationId,
         string authenticationMethod)

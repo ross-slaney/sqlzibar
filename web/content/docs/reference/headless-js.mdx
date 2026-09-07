@@ -96,7 +96,7 @@ const { flow, status, view, viewModel, error, fieldErrors, redirectUrl } =
 
 The hook keeps one flow per authorization request. It rebuilds the flow only when `issuer`, `clientId`, `redirectUri`, `headlessApiBasePath`, or `credentials` change; `fetch` and `generatePkce` may be inline functions.
 
-`credentials: "include"` is required in the browser so the AuthPage session cookie is sent. Omit it on native. Always leave with `window.location.assign(redirectUrl)` — do not hand-parse the URL.
+`credentials: "include"` is required in the browser so the issuer session cookie is sent. Omit it on native. Always leave with `window.location.assign(redirectUrl)` — do not hand-parse the URL.
 
 ## Native app
 

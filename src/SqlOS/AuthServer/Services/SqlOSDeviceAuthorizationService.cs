@@ -21,7 +21,7 @@ public sealed class SqlOSDeviceAuthorizationService
     private readonly SqlOSCryptoService _cryptoService;
     private readonly SqlOSAuthServerOptions _options;
     private readonly SqlOSMfaPolicyService _mfaPolicyService;
-    private readonly SqlOSAuthPageSessionService _authPageSessionService;
+    private readonly SqlOSIssuerSessionService _issuerSessionService;
 
     public SqlOSDeviceAuthorizationService(
         ISqlOSAuthServerDbContext context,
@@ -30,7 +30,7 @@ public sealed class SqlOSDeviceAuthorizationService
         SqlOSCryptoService cryptoService,
         IOptions<SqlOSAuthServerOptions> options,
         SqlOSMfaPolicyService? mfaPolicyService = null,
-        SqlOSAuthPageSessionService? authPageSessionService = null)
+        SqlOSIssuerSessionService? issuerSessionService = null)
     {
         _context = context;
         _adminService = adminService;
@@ -39,8 +39,8 @@ public sealed class SqlOSDeviceAuthorizationService
         _options = options.Value;
         var settingsService = new SqlOSSettingsService(context, options, new SqlOSAcsAuthEmailSender(options));
         _mfaPolicyService = mfaPolicyService ?? new SqlOSMfaPolicyService(context, settingsService, options);
-        _authPageSessionService = authPageSessionService
-            ?? new SqlOSAuthPageSessionService(context, cryptoService, settingsService);
+        _issuerSessionService = issuerSessionService
+            ?? new SqlOSIssuerSessionService(context, cryptoService, settingsService);
     }
 
     public async Task<SqlOSDeviceAuthorizationStartResult> StartAsync(
@@ -485,7 +485,7 @@ public sealed class SqlOSDeviceAuthorizationService
     /// <summary>
     /// Resolves when the approving user actually authenticated. The hosted and
     /// headless approve endpoints sign the user in before the approval POST, so the
-    /// request normally carries an auth-page session cookie whose AuthenticatedAt
+    /// request normally carries an issuer session cookie whose AuthenticatedAt
     /// survives silent SSO reuse. Without one (fresh interactive approval), now is
     /// the authentication moment.
     /// </summary>
@@ -494,7 +494,7 @@ public sealed class SqlOSDeviceAuthorizationService
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        var session = await _authPageSessionService.TryGetSessionAsync(httpContext, cancellationToken);
+        var session = await _issuerSessionService.TryGetSessionAsync(httpContext, cancellationToken);
         return session != null && string.Equals(session.User.Id, user.Id, StringComparison.Ordinal)
             ? session.AuthenticatedAt
             : DateTime.UtcNow;
