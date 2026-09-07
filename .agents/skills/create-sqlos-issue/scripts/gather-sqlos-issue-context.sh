@@ -25,6 +25,12 @@ echo "== Milestones =="
 gh api "repos/$repo/milestones" --jq '.[] | "#\(.number) \(.title) [\(.state)] due=\(.due_on // "none")"' 2>/dev/null || true
 echo
 
+echo "== Roadmap project fields =="
+echo "Project: https://github.com/users/ross-slaney/projects/1"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+bash "$script_dir/add-sqlos-issue-to-roadmap.sh" --check-fields 2>/dev/null || true
+echo
+
 if [ "${#terms[@]}" -eq 0 ]; then
   echo "== Search =="
   echo "No search terms supplied."

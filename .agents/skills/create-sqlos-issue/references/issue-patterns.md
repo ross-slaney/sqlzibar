@@ -64,6 +64,23 @@ Use only the gates relevant to the surfaces changed:
 - `scripts/docs-check.sh`
 - `node --check src/SqlOS/Dashboard/wwwroot/app.js`
 
+## Roadmap Intake Fields
+
+Filed issues belong on [sqlos Roadmap](https://github.com/users/ross-slaney/projects/1). Drafts do not.
+
+Required fields:
+
+- **Business Value**: `BV 1`–`BV 4`. Score unless the caller passed `bv`.
+- **Job Size**: `Size 1`–`Size 4`. Score unless the caller passed `size`.
+- **Release**: **No Release** unless the caller passed an exact current board release.
+
+Optional fields:
+
+- **Status**: `Backlog` is the usual new-issue column.
+- **Track**: set only when the issue clearly maps to a current Track option.
+
+Use `.agents/skills/create-sqlos-issue/scripts/add-sqlos-issue-to-roadmap.sh` after `gh issue create`. Confirm current option names with `--check-fields` before inventing values.
+
 ## Duplicate Checks
 
 Search both words and concepts. For "magic link", also search:
