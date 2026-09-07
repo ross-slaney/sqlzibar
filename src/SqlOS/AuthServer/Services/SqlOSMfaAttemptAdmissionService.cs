@@ -349,9 +349,10 @@ public sealed class SqlOSMfaAttemptAdmissionService
         var userAgent = httpContext?.Request.Headers.UserAgent.ToString();
         if (!string.IsNullOrWhiteSpace(userAgent) && !string.IsNullOrWhiteSpace(challenge.UserId))
         {
+            var separator = SqlOSDatabase.CompositeKeySeparator(_context.Database.ProviderName);
             yield return new MfaBucketIdentity(
                 "device",
-                BoundKey($"{challenge.UserId}\u001F{challenge.ClientApplicationId}\u001F{userAgent.Trim()}"),
+                BoundKey($"{challenge.UserId}{separator}{challenge.ClientApplicationId}{separator}{userAgent.Trim()}"),
                 _options.MaxFailedAttemptsPerDevice);
         }
 

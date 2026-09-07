@@ -22,8 +22,14 @@ public static class ModelBuilderExtensions
         if (SqlOSDatabase.IsPostgreSql(providerName))
         {
             SqlOSDatabase.EnablePostgreSqlTimestampCompatibility();
+            var sqlosAssembly = typeof(SqlOSDatabase).Assembly;
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())
             {
+                if (entityType.ClrType.Assembly != sqlosAssembly)
+                {
+                    continue;
+                }
+
                 foreach (var property in entityType.GetProperties())
                 {
                     if (property.ClrType == typeof(DateTime) || property.ClrType == typeof(DateTime?))

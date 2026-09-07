@@ -21,7 +21,7 @@ Prerequisites:
 
 - .NET 9 SDK
 - Docker Desktop or another Docker-compatible runtime
-- free ports `1435`, `5080`, `18890`, and `18891`
+- free ports `5080`, `18890`, and `18891` (plus `1435` when you opt into SQL Server)
 
 From the repository root:
 
@@ -31,7 +31,7 @@ dotnet run --project examples/SqlOS.Todo.AppHost/SqlOS.Todo.AppHost.csproj
 
 This starts:
 
-- a persistent SQL Server container on host port `1435`;
+- a persistent PostgreSQL container by default (set `SqlOS:DatabaseProvider=SqlServer` for SQL Server on host port `1435`);
 - the `sqlos-todo` database;
 - the Todo API, UI, hosted AuthPage, and Swagger at `http://localhost:5080`;
 - the Aspire dashboard on its printed authenticated URL, configured for HTTPS port `18890`.

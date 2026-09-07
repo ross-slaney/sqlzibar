@@ -19,8 +19,39 @@ internal static class SqlOSDatabase
     public static bool IsInMemory(string? providerName)
         => string.Equals(providerName, InMemoryProviderName, StringComparison.Ordinal);
 
+    /// <summary>
+    /// PostgreSQL cannot store NUL in text, so composite stored keys use US there.
+    /// SQL Server keeps NUL so existing MFA device lockout rows still match.
+    /// </summary>
+    public static char CompositeKeySeparator(string? providerName)
+        => IsPostgreSql(providerName) ? '\u001F' : '\0';
+
+    public static bool IsPostgreSql(DbContextOptionsBuilder options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        foreach (var extension in options.Options.Extensions)
+        {
+            var typeName = extension.GetType().FullName;
+            if (typeName is not null
+                && typeName.StartsWith("Npgsql.EntityFrameworkCore.PostgreSQL", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static void EnablePostgreSqlTimestampCompatibility()
         => AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
+    public static void EnablePostgreSqlTimestampCompatibilityIfNeeded(DbContextOptionsBuilder options)
+    {
+        if (IsPostgreSql(options))
+        {
+            EnablePostgreSqlTimestampCompatibility();
+        }
+    }
 
     public static ISqlOSDatabaseProvider Resolve(string? providerName)
     {

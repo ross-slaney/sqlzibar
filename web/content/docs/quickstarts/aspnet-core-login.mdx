@@ -33,8 +33,8 @@ This is an all-.NET client. It does not require a JavaScript authentication SDK 
 
 - the SqlOS repository checked out locally;
 - .NET 9 SDK;
-- Docker running with enough memory for SQL Server;
-- ports `1435`, `5080`, `5090`, `18890`, and `18891` available.
+- Docker running with enough memory for PostgreSQL or SQL Server;
+- ports `5080`, `5090`, `18890`, and `18891` available (plus `1435` when you opt into SQL Server).
 
 ## Run the working sample
 
@@ -44,7 +44,7 @@ From the repository root:
 dotnet run --project examples/SqlOS.Todo.AppHost/SqlOS.Todo.AppHost.csproj
 ```
 
-Use the authenticated Aspire dashboard URL printed in the terminal (its configured listener is `https://localhost:18890`). Wait for SQL Server to become healthy and for `todo-api` and `aspnet-web` to show **Running**, then open:
+Use the authenticated Aspire dashboard URL printed in the terminal (its configured listener is `https://localhost:18890`). Wait for the database to become healthy and for `todo-api` and `aspnet-web` to show **Running**, then open:
 
 ```text
 http://localhost:5090
@@ -199,7 +199,7 @@ Keep logout as a `POST`. Razor Pages antiforgery protection prevents another sit
 | [`Program.cs`](https://github.com/ross-slaney/sqlos/blob/main/examples/SqlOS.Example.AspNetCoreWeb/Program.cs) | Cookie and OpenID Connect registration, discovery, PKCE, scopes, and claim mapping |
 | [`Index.cshtml.cs`](https://github.com/ross-slaney/sqlos/blob/main/examples/SqlOS.Example.AspNetCoreWeb/Pages/Index.cshtml.cs) | Challenge, protected API call, and revoking logout |
 | [`Index.cshtml`](https://github.com/ross-slaney/sqlos/blob/main/examples/SqlOS.Example.AspNetCoreWeb/Pages/Index.cshtml) | Login/logout UI and authenticated proof |
-| [`Todo AppHost`](https://github.com/ross-slaney/sqlos/blob/main/examples/SqlOS.Todo.AppHost/Program.cs) | One-command SQL Server, API, and Razor app orchestration |
+| [`Todo AppHost`](https://github.com/ross-slaney/sqlos/blob/main/examples/SqlOS.Todo.AppHost/Program.cs) | One-command PostgreSQL (or SQL Server), API, and Razor app orchestration |
 | [`Todo API`](https://github.com/ross-slaney/sqlos/blob/main/examples/SqlOS.Todo.Api/Program.cs) | `example-aspnet` client seed and audience-protected `/api/me` |
 
 ## Adapt it to your application

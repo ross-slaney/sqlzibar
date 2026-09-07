@@ -17,7 +17,7 @@ order: 2
 
 <CardGrid cols={2}>
   <Card title="Native ASP.NET Core login" description="Razor Pages, built-in OAuth middleware, PKCE, encrypted cookies, a protected API call, and revoking logout." href="/docs/quickstarts/aspnet-core-login" />
-  <Card title="Smallest complete backend" description="One Todo API with hosted login, SQL Server, bearer tokens, Swagger, and FGA-filtered data." href="/docs/quickstarts/run-todo" />
+  <Card title="Smallest complete backend" description="One Todo API with hosted login, PostgreSQL, bearer tokens, Swagger, and FGA-filtered data." href="/docs/quickstarts/run-todo" />
   <Card title="Broad product tour" description="Two APIs and ASP.NET Core, Next.js, and Angular clients orchestrated with .NET Aspire." href="/docs/quickstarts/run-example-stack" />
   <Card title="Terminal OAuth" description="A .NET CLI using Device Authorization Grant, token polling, refresh, and protected Todo commands." href="/docs/authserver/cli-oauth" />
   <Card title="Sign in with your app" description="SqlOS as an OpenID Provider: a Next.js + Auth.js relying party federates through OIDC discovery, consent, and remembered grants." href="/docs/authserver/openid-provider" />
@@ -31,7 +31,7 @@ Run one command from the repository root:
 dotnet run --project examples/SqlOS.Todo.AppHost/SqlOS.Todo.AppHost.csproj
 ```
 
-This starts a persistent SQL Server container, the Todo API and embedded SqlOS host at `http://localhost:5080`, and the Razor Pages client at `http://localhost:5090`. Aspire reports resource health at its authenticated `https://localhost:18890` dashboard.
+This starts a persistent PostgreSQL container, the Todo API and embedded SqlOS host at `http://localhost:5080`, and the Razor Pages client at `http://localhost:5090`. Set `SqlOS:DatabaseProvider=SqlServer` to start SQL Server instead. Aspire reports resource health at its authenticated `https://localhost:18890` dashboard.
 
 ![SqlOS hosted sign-in used by the runnable .NET client](/docs/auth-signin-page.png)
 

@@ -92,7 +92,7 @@ The Todo sample gives you a working login flow and authorized EF Core queries wi
 dotnet run --project examples/SqlOS.Todo.AppHost/SqlOS.Todo.AppHost.csproj
 ```
 
-Then open `http://localhost:5090/`. The Aspire AppHost starts SQL Server, the Todo API with SqlOS at `http://localhost:5080`, and a Razor Pages client at `http://localhost:5090`.
+Then open `http://localhost:5090/`. The Aspire AppHost starts PostgreSQL, the Todo API with SqlOS at `http://localhost:5080`, and a Razor Pages client at `http://localhost:5090`. Set `SqlOS:DatabaseProvider=SqlServer` to start SQL Server instead.
 
 <p align="center">
   <img src="https://sqlos.dev/docs/guides-password-login.png" alt="Hosted AuthPage password step from the SqlOS Todo sample" width="560" />
@@ -102,7 +102,7 @@ Then open `http://localhost:5090/`. The Aspire AppHost starts SQL Server, the To
 
 ## Add SqlOS to your app
 
-You'll need **.NET 9**, **EF Core 9**, and a **SQL Server** database your application can reach.
+You'll need **.NET 9**, **EF Core 9**, and a **SQL Server or PostgreSQL** database your application can reach.
 
 ```bash
 dotnet add package SqlOS --version 4.2.0

@@ -38,7 +38,7 @@ MySQL and SQLite are not supported.
 - **No required extensions.** SqlOS does not depend on `citext` or other extra modules.
 - **Advisory locks.** Admission, rotation, and rate-limit serialization use `pg_advisory_xact_lock` with a timeout. Hold an active transaction, the same way SQL Server application locks require one.
 - **Collation.** Binary uniqueness uses `COLLATE "C"` where SQL Server used `Latin1_General_100_BIN2`.
-- **Timestamps.** Schema columns use `timestamp` (no time zone), matching SQL Server `datetime2`. Store UTC `DateTime` values.
+- **Timestamps.** Schema columns use `timestamp` (no time zone), matching SQL Server `datetime2`. Store UTC `DateTime` values. SqlOS enables Npgsql's `EnableLegacyTimestampBehavior` AppContext switch only when the application `DbContext` is configured with `UseNpgsql`. The switch is process-wide and must be set before the first Npgsql type mapping is compiled. Inherit `SqlOSDbContext<TContext>` or call `UseSqlOS` with the PostgreSQL provider name so SqlOS can set it; `AddSqlOS` does not enable the switch for SQL Server hosts. `UseSqlOS` remaps only SqlOS-owned `DateTime` columns. If the same process already maps host `DateTime` properties to `timestamptz`, keep those mappings explicit.
 - **Backups.** Use your normal PostgreSQL backup and restore path. SqlOS does not ship provider-specific dump tooling.
 
 ## Todo sample

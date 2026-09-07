@@ -1,7 +1,10 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SqlOS.Database;
+using SqlOS.Extensions;
 using SqlOS.Fga.Configuration;
+using SqlOS.Fga.Models;
 
 namespace SqlOS.Tests;
 
@@ -82,6 +85,50 @@ public class SqlOSDatabaseProviderTests
     }
 
     [TestMethod]
+    public void CompositeKeySeparator_KeepsNulOnSqlServerAndUsesUnitSeparatorOnPostgreSql()
+    {
+        SqlOSDatabase.CompositeKeySeparator(SqlOSDatabase.SqlServerProviderName).Should().Be('\0');
+        SqlOSDatabase.CompositeKeySeparator(SqlOSDatabase.InMemoryProviderName).Should().Be('\0');
+        SqlOSDatabase.CompositeKeySeparator(null).Should().Be('\0');
+        SqlOSDatabase.CompositeKeySeparator(SqlOSDatabase.PostgreSqlProviderName).Should().Be('\u001F');
+    }
+
+    [TestMethod]
+    public void IsPostgreSql_DetectsProviderFromDbContextOptions()
+    {
+        var sqlServer = new DbContextOptionsBuilder()
+            .UseSqlServer("Server=.;Database=SqlOS_ProviderDetect;Trusted_Connection=True;TrustServerCertificate=True");
+        var postgreSql = new DbContextOptionsBuilder()
+            .UseNpgsql("Host=localhost;Database=sqlos_provider_detect;Username=sqlos;Password=sqlos");
+        var inMemory = new DbContextOptionsBuilder()
+            .UseInMemoryDatabase("sqlos-provider-detect");
+
+        SqlOSDatabase.IsPostgreSql(sqlServer).Should().BeFalse();
+        SqlOSDatabase.IsPostgreSql(postgreSql).Should().BeTrue();
+        SqlOSDatabase.IsPostgreSql(inMemory).Should().BeFalse();
+    }
+
+    [TestMethod]
+    public void UseSqlOS_OnPostgreSql_RewritesOnlySqlOSAssemblyDateTimeColumns()
+    {
+        var options = new DbContextOptionsBuilder<HostDateTimeTestDbContext>()
+            .UseSqlServer("Server=.;Database=SqlOS_DateTimeRewrite;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options;
+
+        using var context = new HostDateTimeTestDbContext(options);
+
+        context.Model.FindEntityType(typeof(HostDateTimeRow))!
+            .FindProperty(nameof(HostDateTimeRow.CreatedAt))!
+            .GetColumnType()
+            .Should().NotBe("timestamp without time zone");
+
+        context.Model.FindEntityType(typeof(SqlOSFgaResource))!
+            .FindProperty(nameof(SqlOSFgaResource.CreatedAt))!
+            .GetColumnType()
+            .Should().Be("timestamp without time zone");
+    }
+
+    [TestMethod]
     public void ModelSql_UsesProviderSpecificFilters()
     {
         SqlOSModelSql.IsNotNull(SqlOSDatabase.SqlServerProviderName, "SeedKey")
@@ -93,4 +140,23 @@ public class SqlOSDatabaseProviderTests
         SqlOSModelSql.IsNull(SqlOSDatabase.PostgreSqlProviderName, "RevokedAt")
             .Should().Be("\"RevokedAt\" IS NULL");
     }
+}
+
+file sealed class HostDateTimeTestDbContext(DbContextOptions<HostDateTimeTestDbContext> options)
+    : DbContext(options)
+{
+    public DbSet<HostDateTimeRow> HostRows => Set<HostDateTimeRow>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<HostDateTimeRow>();
+        modelBuilder.UseSqlOS(GetType(), SqlOSDatabase.PostgreSqlProviderName);
+    }
+}
+
+// Lives in SqlOS.Tests so a namespace prefix of "SqlOS" would still rewrite it.
+file sealed class HostDateTimeRow
+{
+    public string Id { get; set; } = "host-1";
+    public DateTime CreatedAt { get; set; }
 }

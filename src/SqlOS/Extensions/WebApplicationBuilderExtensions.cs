@@ -56,8 +56,13 @@ public static class WebApplicationBuilderExtensions
         Action<SqlOSOptions>? configureSqlOS = null)
         where TContext : DbContext, ISqlOSAuthServerDbContext, ISqlOSFgaDbContext
     {
-        SqlOSDatabase.EnablePostgreSqlTimestampCompatibility();
-        builder.Services.AddDbContext<TContext>(configureDbContext);
+        builder.Services.AddDbContext<TContext>(options =>
+        {
+            configureDbContext(options);
+            // Npgsql caches DateTime mappings on first use. Enable the UTC timestamp
+            // compatibility switch only after this callback selects UseNpgsql.
+            SqlOSDatabase.EnablePostgreSqlTimestampCompatibilityIfNeeded(options);
+        });
         builder.Services.AddSqlOS<TContext>(configureSqlOS);
         return builder;
     }
