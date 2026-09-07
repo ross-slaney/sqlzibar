@@ -1,9 +1,23 @@
 using Aspire.Hosting;
 
+// Ports are configurable so the Playwright suite
+// (examples/SqlOS.Todo.E2eTests) can boot this same app host on alternate
+// ports with an ephemeral Postgres container while a manually started demo
+// keeps running on the defaults. Issuer, audience, and the ASP.NET callback
+// all flow from these values.
 var builder = DistributedApplication.CreateBuilder(args);
 
-const int todoPort = 5080;
+var todoPort = GetPort(builder.Configuration["Todo:ApiPort"], 5080);
+var webPort = GetPort(builder.Configuration["Todo:WebPort"], 5090);
+var ephemeralSql = string.Equals(
+    builder.Configuration["Todo:EphemeralSql"], "true", StringComparison.OrdinalIgnoreCase);
+var useSqlServer = string.Equals(
+    builder.Configuration["SqlOS:DatabaseProvider"],
+    "SqlServer",
+    StringComparison.OrdinalIgnoreCase);
+
 var todoOrigin = $"http://localhost:{todoPort}";
+var webOrigin = $"http://localhost:{webPort}";
 var todoResource = $"{todoOrigin}/api/todos";
 var todoIssuer = $"{todoOrigin}/sqlos/auth";
 var todoEnableEmailOtp = builder.Configuration["TodoSample:EnableEmailOtp"];
@@ -24,26 +38,52 @@ var twilioVerifyServiceSid = builder.Configuration["SqlOS:PhoneOtp:TwilioVerifyS
     ?? builder.Configuration["TWILIO_VERIFY_SERVICE_SID"];
 var phoneOtpDefaultRegion = builder.Configuration["SqlOS:PhoneOtp:DefaultRegion"]
     ?? builder.Configuration["TWILIO_DEFAULT_REGION"];
-var sqlPassword = builder.AddParameter("sql-password", value: "LocalDevPassword123!");
 
-var sql = builder.AddSqlServer("sql", password: sqlPassword, port: 1435)
-    .WithLifetime(ContainerLifetime.Persistent)
-    .WithDataVolume()
-    .WithContainerRuntimeArgs("--platform", "linux/amd64");
+IResourceBuilder<IResourceWithConnectionString> database;
+if (useSqlServer)
+{
+    var sqlPassword = builder.AddParameter("sql-password", value: "LocalDevPassword123!");
+    var sql = builder.AddSqlServer("sql", password: sqlPassword, port: 1435)
+        .WithContainerRuntimeArgs("--platform", "linux/amd64");
+    if (!ephemeralSql)
+    {
+        sql = sql.WithLifetime(ContainerLifetime.Persistent)
+            .WithDataVolume();
+    }
 
-var database = sql.AddDatabase("sqlos-todo");
+    database = sql.AddDatabase("sqlos-todo");
+}
+else
+{
+    var postgres = builder.AddPostgres("sql");
+    if (!ephemeralSql)
+    {
+        postgres = postgres.WithLifetime(ContainerLifetime.Persistent)
+            .WithDataVolume();
+    }
 
-var todoApi = builder.AddProject<Projects.SqlOS_Todo_Api>("todo-api")
+    database = postgres.AddDatabase("sqlos-todo");
+}
+
+var todoApi = builder.AddProject<Projects.SqlOS_Todo_Api>("todo-api", launchProfileName: null)
+    .WithHttpEndpoint(port: todoPort, isProxied: false)
     .WithReference(database)
     .WaitFor(database)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+    .WithEnvironment("ASPNETCORE_URLS", todoOrigin)
     .WithEnvironment("ConnectionStrings__DefaultConnection", database.Resource.ConnectionStringExpression)
     .WithEnvironment("SqlOS__Issuer", todoIssuer)
     .WithEnvironment("TodoSample__PublicOrigin", todoOrigin)
     .WithEnvironment("TodoSample__Resource", todoResource)
+    .WithEnvironment("TodoSample__AspNetRedirectUri", $"{webOrigin}/signin-sqlos")
     .WithEnvironment("TodoSample__EnableHeadless", "false")
-    .WithEnvironment("TodoSample__EnableDcr", todoEnableDcr);
+    .WithEnvironment("TodoSample__EnableDcr", todoEnableDcr)
+    .WithEnvironment("SqlOS__DatabaseProvider", useSqlServer ? "SqlServer" : "PostgreSql");
 
-builder.AddProject<Projects.SqlOS_Example_AspNetCoreWeb>("aspnet-web")
+builder.AddProject<Projects.SqlOS_Example_AspNetCoreWeb>("aspnet-web", launchProfileName: null)
+    .WithHttpEndpoint(port: webPort, isProxied: false)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+    .WithEnvironment("ASPNETCORE_URLS", webOrigin)
     .WithEnvironment("SqlOS__Origin", todoOrigin)
     .WithEnvironment("SqlOS__ClientId", "example-aspnet")
     .WaitFor(todoApi);
@@ -90,3 +130,6 @@ if (!string.IsNullOrWhiteSpace(phoneOtpDefaultRegion))
 }
 
 builder.Build().Run();
+
+static int GetPort(string? configured, int fallback) =>
+    int.TryParse(configured, out var port) ? port : fallback;

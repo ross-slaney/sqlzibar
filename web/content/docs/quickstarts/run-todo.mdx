@@ -11,7 +11,7 @@ section: quickstarts
   href="#run"
   actionLabel="Run the sample"
 >
-  Aspire starts SQL Server, the SqlOS-enabled Todo API, and a Razor Pages client. Password signup works without an email, SMS, or external identity provider.
+  Aspire starts PostgreSQL (or SQL Server), the SqlOS-enabled Todo API, and a Razor Pages client. Password signup works without an email, SMS, or external identity provider.
 </Banner>
 
 ## Goal
@@ -22,8 +22,8 @@ Create an account through the SqlOS hosted AuthPage, return to a secure ASP.NET 
 
 - the SqlOS repository checked out locally;
 - .NET 9 SDK;
-- Docker running with enough memory for SQL Server;
-- ports `1435`, `5080`, `5090`, `18890`, and `18891` available.
+- Docker running with enough memory for SQL Server or PostgreSQL;
+- ports `5080`, `5090`, `18890`, and `18891` available (plus `1435` when you opt into SQL Server).
 
 This quickstart uses the source at **SqlOS 4.2.0**. Local password authentication is the default, so the first run does not require Azure Communication Services, Twilio, or an OIDC provider.
 
@@ -41,9 +41,9 @@ Use the authenticated Aspire dashboard URL printed in the terminal. Its configur
 https://localhost:18890
 ```
 
-Wait for SQL Server to become healthy and for `todo-api` and `aspnet-web` to show **Running**. Aspire keeps the logs and resource endpoints together, which is the fastest place to diagnose a failed first start.
+Wait for the database to become healthy and for `todo-api` and `aspnet-web` to show **Running**. Aspire keeps the logs and resource endpoints together, which is the fastest place to diagnose a failed first start.
 
-The AppHost uses a persistent SQL Server container on port `1435` and passes the database connection string to the API. SqlOS initializes its schema, automatically protected signing key, OAuth clients, and FGA seed data when `todo-api` starts.
+The AppHost uses a persistent PostgreSQL container by default and passes the database connection string to the API, which calls `UseNpgsql`. Set `SqlOS:DatabaseProvider=SqlServer` to start SQL Server on port `1435` instead. SqlOS initializes its schema, automatically protected signing key, OAuth clients, and FGA seed data when `todo-api` starts. The Playwright suite in `examples/SqlOS.Todo.E2eTests` boots the same host on alternate ports with ephemeral Postgres.
 
 ## Verify the all-.NET login
 
@@ -92,9 +92,9 @@ The API also contains CLI device flow, CIMD, DCR, email OTP, and SMS OTP example
 
 ## Common failures
 
-### SQL Server never becomes healthy
+### PostgreSQL never becomes healthy
 
-Confirm Docker is running and port `1435` is free. On Apple silicon, the SQL Server image runs through the platform setting in the AppHost and may take longer on first start.
+Confirm Docker is running. The demo keeps a persistent data volume; if a previous run stored a different generated password, remove the Aspire Postgres volume and start again. For SQL Server (`SqlOS:DatabaseProvider=SqlServer`), confirm port `1435` is free. On Apple silicon, the SQL Server image runs through the platform setting in the AppHost and may take longer on first start.
 
 ### The Aspire dashboard certificate is not trusted
 
@@ -106,7 +106,7 @@ Stop the conflicting process before restarting. The issuer, audience, and callba
 
 ### Login does not return to the Razor app
 
-Start the challenge at `http://localhost:5090` rather than opening a hosted-auth URL directly. The seeded callback must remain exactly `http://localhost:5090/signin-sqlos`.
+Start the challenge at `http://localhost:5090` rather than opening a hosted-auth URL directly. The seeded callback must remain exactly `TodoSample:AspNetRedirectUri` (default `http://localhost:5090/signin-sqlos`).
 
 ### Old sample data behaves differently
 

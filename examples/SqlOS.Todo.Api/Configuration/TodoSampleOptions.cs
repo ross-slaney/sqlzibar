@@ -9,6 +9,7 @@ public sealed class TodoSampleOptions
     public bool EnableHeadless { get; set; }
     public bool EnableDcr { get; set; }
     public string Resource { get; set; } = "http://localhost:5080/api/todos";
+    public string AspNetRedirectUri { get; set; } = "http://localhost:5090/signin-sqlos";
     public bool EnableEmailOtp { get; set; }
     public bool EnablePhoneOtp { get; set; }
     public string LocalClientId { get; set; } = "todo-local";

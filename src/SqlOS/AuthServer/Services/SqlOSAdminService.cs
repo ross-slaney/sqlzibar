@@ -10,6 +10,7 @@ using SqlOS.AuthServer.Configuration;
 using SqlOS.AuthServer.Contracts;
 using SqlOS.AuthServer.Interfaces;
 using SqlOS.AuthServer.Models;
+using SqlOS.Database;
 using SqlOS.Fga.Models;
 using SqlOS.Pagination;
 
@@ -44,8 +45,9 @@ public sealed partial class SqlOSAdminService
 
     public async Task CleanupExpiredTemporaryTokensAsync(CancellationToken cancellationToken = default)
     {
+        var now = DateTime.UtcNow;
         var expired = await _context.Set<SqlOSTemporaryToken>()
-            .Where(x => x.ExpiresAt < DateTime.UtcNow || x.ConsumedAt != null)
+            .Where(x => x.ExpiresAt < now || x.ConsumedAt != null)
             .ToListAsync(cancellationToken);
         if (expired.Count == 0)
         {
@@ -58,8 +60,9 @@ public sealed partial class SqlOSAdminService
 
     public async Task CleanupExpiredEmailOtpChallengesAsync(CancellationToken cancellationToken = default)
     {
+        var now = DateTime.UtcNow;
         var expired = await _context.Set<SqlOSEmailOtpChallenge>()
-            .Where(x => x.ExpiresAt < DateTime.UtcNow || x.ConsumedAt != null || x.InvalidatedAt != null)
+            .Where(x => x.ExpiresAt < now || x.ConsumedAt != null || x.InvalidatedAt != null)
             .ToListAsync(cancellationToken);
         if (expired.Count == 0)
         {
@@ -72,8 +75,9 @@ public sealed partial class SqlOSAdminService
 
     public async Task CleanupExpiredPhoneOtpChallengesAsync(CancellationToken cancellationToken = default)
     {
+        var now = DateTime.UtcNow;
         var expired = await _context.Set<SqlOSPhoneOtpChallenge>()
-            .Where(x => x.ExpiresAt < DateTime.UtcNow || x.ConsumedAt != null || x.InvalidatedAt != null)
+            .Where(x => x.ExpiresAt < now || x.ConsumedAt != null || x.InvalidatedAt != null)
             .ToListAsync(cancellationToken);
         if (expired.Count == 0)
         {
@@ -137,19 +141,13 @@ public sealed partial class SqlOSAdminService
             {
                 retryContext.ChangeTracker.Clear();
             }
-            await using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
-            if (string.Equals(_context.Database.ProviderName, "Microsoft.EntityFrameworkCore.SqlServer", StringComparison.Ordinal))
-            {
-                await _context.Database.ExecuteSqlRawAsync("""
-                    DECLARE @result int;
-                    EXEC @result = sys.sp_getapplock
-                        @Resource = N'SqlOS:ClientSeedReconciliation',
-                        @LockMode = N'Exclusive',
-                        @LockOwner = N'Transaction',
-                        @LockTimeout = 30000;
-                    IF @result < 0 THROW 51000, 'Could not acquire the SqlOS client seed reconciliation lock.', 1;
-                    """, cancellationToken);
-            }
+            await using var transaction = await _context.Database.BeginTransactionAsync(SqlOSDatabase.ExclusiveWorkIsolationLevel(_context.Database), cancellationToken);
+            await SqlOSDatabase.AcquireExclusiveTransactionLockAsync(
+                _context.Database,
+                "SqlOS:ClientSeedReconciliation",
+                TimeSpan.FromSeconds(30),
+                "Could not acquire the SqlOS client seed reconciliation lock.",
+                cancellationToken);
             await UpsertSeededClientsCoreAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         });
@@ -649,7 +647,7 @@ public sealed partial class SqlOSAdminService
             }
 
             await using var transaction = await _context.Database.BeginTransactionAsync(
-                System.Data.IsolationLevel.Serializable,
+                SqlOSDatabase.ExclusiveWorkIsolationLevel(_context.Database),
                 cancellationToken);
             await SqlOSSsoPortalOrganizationLock.AcquireAsync(_context, organizationId, cancellationToken);
             var updated = await UpdateOrganizationCoreAsync(organizationId, request, cancellationToken);

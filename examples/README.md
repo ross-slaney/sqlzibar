@@ -90,7 +90,7 @@ It does **not** start the Expo app or Todo CLI. Those are separate clients that 
 | Port | Owner |
 | --- | --- |
 | `1434` | Full example SQL Server container |
-| `1435` | Todo-only SQL Server container |
+| `1435` | Todo-only SQL Server container (`SqlOS:DatabaseProvider=SqlServer`) |
 | `3010` | Next.js under the full AppHost |
 | `4200` | Angular |
 | `5062` | Example API and SqlOS host |
@@ -99,9 +99,9 @@ It does **not** start the Expo app or Todo CLI. Those are separate clients that 
 | `18888` / `18889` | Full AppHost dashboard / OTLP endpoint |
 | `18890` / `18891` | Todo AppHost dashboard / OTLP endpoint |
 
-Both AppHosts use a persistent SQL container and data volume. Stopping the AppHost does not erase users, clients, grants, or sample data. To start fresh, stop the AppHost and deliberately remove its SQL container and associated data volume, or drop the disposable sample database. Do not do that if the volume contains data you care about.
+The full example AppHost uses a persistent SQL Server container. The Todo-only AppHost defaults to a persistent PostgreSQL container (`UseNpgsql`) and uses SQL Server on port `1435` only when `SqlOS:DatabaseProvider=SqlServer`. Stopping the AppHost does not erase users, clients, grants, or sample data. To start fresh, stop the AppHost and deliberately remove its database container and associated data volume, or drop the disposable sample database. Do not do that if the volume contains data you care about.
 
-The full stack uses separate `sqlos-example` and `sqlos-todo` databases in one SQL container. The Todo-only AppHost uses its own SQL container and `sqlos-todo` database.
+The full stack uses separate `sqlos-example` and `sqlos-todo` databases in one SQL Server container. The Todo-only AppHost uses its own database container and `sqlos-todo` database.
 
 ## Optional provider configuration
 

@@ -1,0 +1,55 @@
+---
+title: "Choose SQL Server or PostgreSQL"
+description: "Keep the same SqlOS host registration and switch only the EF Core provider line, plus the Aspire database resource in samples."
+order: 7
+section: guides
+---
+
+<Banner
+  eyebrow="Operations guide"
+  title="Pick a database without splitting SqlOS configuration"
+  href="../getting-started"
+  actionLabel="Getting Started"
+>
+  SqlOS reads the EF Core provider from your application `DbContext`. SQL Server stays the default path. PostgreSQL is the other supported relational host.
+</Banner>
+
+SqlOS ships one package. Hosts keep `AddSqlOS<TContext>(db => db.UseSqlServer(...))` or switch that callback to `UseNpgsql(...)`. Startup then loads the matching schema, function, and lock pack. Do not invent a second options model, dashboard switch, or NuGet package for the provider.
+
+## Supported providers
+
+| Provider | EF registration | Locks | Schema pack |
+| --- | --- | --- | --- |
+| SQL Server | `UseSqlServer(connectionString)` | `sp_getapplock` | T-SQL scripts, `dbo` |
+| PostgreSQL | `UseNpgsql(connectionString)` | Transaction-scoped advisory locks | PostgreSQL scripts, still `dbo` |
+
+Unknown relational providers fail closed with an `InvalidOperationException` that names `UseSqlServer` and `UseNpgsql`. In-memory and other non-relational providers skip application locks.
+
+MySQL and SQLite are not supported.
+
+## What stays the same
+
+- Table names, ownership, and the public application/admin contracts.
+- The default schema name `dbo`. On PostgreSQL, SqlOS creates that schema if needed so hosts only change the EF provider line.
+- Code, API, and dashboard control planes. Provider choice is host EF configuration, not an operator policy.
+
+## PostgreSQL specifics
+
+- **No required extensions.** SqlOS does not depend on `citext` or other extra modules.
+- **Advisory locks.** Admission, rotation, and rate-limit serialization use `pg_advisory_xact_lock` with a timeout. Hold an active transaction, the same way SQL Server application locks require one.
+- **Collation.** Binary uniqueness uses `COLLATE "C"` where SQL Server used `Latin1_General_100_BIN2`.
+- **Timestamps.** Schema columns use `timestamp` (no time zone), matching SQL Server `datetime2`. Store UTC `DateTime` values. SqlOS enables Npgsql's `EnableLegacyTimestampBehavior` AppContext switch only when the application `DbContext` is configured with `UseNpgsql`. The switch is process-wide and must be set before the first Npgsql type mapping is compiled. Inherit `SqlOSDbContext<TContext>` or call `UseSqlOS` with the PostgreSQL provider name so SqlOS can set it; `AddSqlOS` does not enable the switch for SQL Server hosts. `UseSqlOS` remaps only SqlOS-owned `DateTime` columns. If the same process already maps host `DateTime` properties to `timestamptz`, keep those mappings explicit.
+- **Backups.** Use your normal PostgreSQL backup and restore path. SqlOS does not ship provider-specific dump tooling.
+
+## Todo sample
+
+The Todo AppHost defaults to PostgreSQL and `UseNpgsql`. Set `SqlOS:DatabaseProvider=SqlServer` to start SQL Server instead.
+
+```bash
+dotnet run --project examples/SqlOS.Todo.AppHost
+dotnet run --project examples/SqlOS.Todo.AppHost -- --SqlOS:DatabaseProvider=SqlServer
+```
+
+Playwright coverage for the Postgres path lives in `examples/SqlOS.Todo.E2eTests` and `scripts/todo-postgres-e2e.sh`.
+
+See [Run the Todo sample](/docs/quickstarts/run-todo).

@@ -20,7 +20,7 @@ Prerequisites:
 
 - .NET 9 SDK;
 - Docker Desktop or another Docker-compatible runtime;
-- free local ports `1435`, `5080`, `5090`, `18890`, and `18891`.
+- free local ports `5080`, `5090`, `18890`, and `18891` (plus `1435` when you opt into SQL Server).
 
 From the repository root, start the Todo AppHost:
 
@@ -28,7 +28,7 @@ From the repository root, start the Todo AppHost:
 dotnet run --project examples/SqlOS.Todo.AppHost/SqlOS.Todo.AppHost.csproj
 ```
 
-The AppHost starts SQL Server, the Todo API/SqlOS host, and this Razor Pages client. Wait for its resources to become healthy, then open `http://localhost:5090` and select **Sign in with SqlOS**.
+The AppHost starts PostgreSQL (or SQL Server), the Todo API/SqlOS host, and this Razor Pages client. Wait for its resources to become healthy, then open `http://localhost:5090` and select **Sign in with SqlOS**.
 
 The terminal also prints an authenticated Aspire dashboard link. Its configured listener is `https://localhost:18890`; use the printed URL because it can include a local dashboard token.
 
@@ -45,7 +45,7 @@ sequenceDiagram
     participant Browser
     participant Web as ASP.NET Core :5090
     participant SqlOS as Todo API + SqlOS :5080
-    participant DB as SQL Server :1435
+    participant DB as PostgreSQL
 
     Browser->>Web: GET /?handler=Login
     Web->>SqlOS: GET /sqlos/auth/.well-known/openid-configuration

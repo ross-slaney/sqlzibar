@@ -1,6 +1,6 @@
 # SqlOS
 
-**A complete auth stack for .NET B2B SaaS — inside your app, on the SQL Server you already run. No identity service to deploy.**
+**A complete auth stack for .NET B2B SaaS — inside your app, on the SQL Server or PostgreSQL database you already run. No identity service to deploy.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![NuGet](https://img.shields.io/nuget/v/SqlOS)](https://www.nuget.org/packages/SqlOS)
@@ -10,7 +10,7 @@ One NuGet package adds authentication *and* authorization to an ASP.NET Core app
 
 ```csharp
 builder.AddSqlOS<AppDbContext>(
-    db => db.UseSqlServer(connectionString),
+    db => db.UseSqlServer(connectionString), // or db.UseNpgsql(connectionString)
     options => options.UseSingleApplication("Acme", app =>
     {
         app.Origin = "http://localhost:5050";
@@ -19,6 +19,8 @@ builder.AddSqlOS<AppDbContext>(
 ```
 
 That's a working auth server with hosted login at `/sqlos/auth/login` and a dashboard at `/sqlos`.
+
+**SQL Server or PostgreSQL — you choose.** One package, one `AddSqlOS` registration. Switch `UseSqlServer` for `UseNpgsql` and SqlOS loads the matching schema, locks, and FGA functions. There is no second NuGet package or dashboard toggle. [Provider guide](https://sqlos.dev/docs/guides/choosing-a-provider).
 
 ## What's in the box
 
@@ -92,7 +94,7 @@ The Todo sample gives you a working login flow and authorized EF Core queries wi
 dotnet run --project examples/SqlOS.Todo.AppHost/SqlOS.Todo.AppHost.csproj
 ```
 
-Then open `http://localhost:5090/`. The Aspire AppHost starts SQL Server, the Todo API with SqlOS at `http://localhost:5080`, and a Razor Pages client at `http://localhost:5090`.
+Then open `http://localhost:5090/`. The Aspire AppHost starts PostgreSQL, the Todo API with SqlOS at `http://localhost:5080`, and a Razor Pages client at `http://localhost:5090`. Set `SqlOS:DatabaseProvider=SqlServer` to start SQL Server instead.
 
 <p align="center">
   <img src="https://sqlos.dev/docs/guides-password-login.png" alt="Hosted AuthPage password step from the SqlOS Todo sample" width="560" />
@@ -102,7 +104,7 @@ Then open `http://localhost:5090/`. The Aspire AppHost starts SQL Server, the To
 
 ## Add SqlOS to your app
 
-You'll need **.NET 9**, **EF Core 9**, and a **SQL Server** database your application can reach.
+You'll need **.NET 9**, **EF Core 9**, and a **SQL Server or PostgreSQL** database your application can reach. Pick the provider on the EF Core line below (`UseSqlServer` or `UseNpgsql`).
 
 ```bash
 dotnet add package SqlOS --version 4.2.0
@@ -134,7 +136,7 @@ var dashboardPassword = builder.Configuration["SqlOS:Dashboard:Password"]
         "Configure SqlOS:Dashboard:Password with user secrets or your secret store.");
 
 builder.AddSqlOS<AppDbContext>(
-    db => db.UseSqlServer(connectionString),
+    db => db.UseSqlServer(connectionString), // or db.UseNpgsql(connectionString)
     options =>
     {
         options.UseSingleApplication("Acme", app =>
@@ -184,6 +186,7 @@ Everything is documented as a task, not a feature tour. Start with whichever mat
 
 | I want to… | Guide |
 | --- | --- |
+| Run on SQL Server or PostgreSQL | [Choose a database](https://sqlos.dev/docs/guides/choosing-a-provider) |
 | Protect an API with access tokens | [Protect an API](https://sqlos.dev/docs/quickstarts/protect-api) |
 | Return only the rows a user may see | [Authorize EF Core queries](https://sqlos.dev/docs/quickstarts/ef-authorization) |
 | Add native ASP.NET Core password login | [Password login](https://sqlos.dev/docs/guides/password-login) |

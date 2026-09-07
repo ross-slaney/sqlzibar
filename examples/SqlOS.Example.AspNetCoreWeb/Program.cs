@@ -69,6 +69,8 @@ builder.Services
         options.Scope.Add("profile");
         options.Scope.Add("email");
         options.Scope.Add("offline_access");
+        options.Scope.Add("todos.read");
+        options.Scope.Add("todos.write");
 
         // Localhost runs over HTTP. Production deployments should use HTTPS and
         // CookieSecurePolicy.Always for the correlation, nonce, and session cookies.

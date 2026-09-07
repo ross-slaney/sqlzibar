@@ -16,10 +16,18 @@ It shows:
 
 ## Run locally
 
-Use the AppHost to get SQL Server plus the Todo sample on one command:
+Use the AppHost to get PostgreSQL plus the Todo sample on one command:
 
 ```bash
 dotnet run --project examples/SqlOS.Todo.AppHost/SqlOS.Todo.AppHost.csproj
+```
+
+The API calls `UseNpgsql` for the AppHost connection string. Set `SqlOS:DatabaseProvider=SqlServer` to start SQL Server instead.
+
+Prove the Postgres path with the Playwright suite:
+
+```bash
+./scripts/todo-postgres-e2e.sh
 ```
 
 Or run the broader Aspire stack and get the Todo app there too:

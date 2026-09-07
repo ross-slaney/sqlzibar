@@ -40,7 +40,7 @@ Create a password account and organization through the hosted AuthPage. No provi
 
 ![Hosted password authentication in the SqlOS Todo sample](/docs/auth-password-step.png)
 
-If you already ran an older version of the sample, allow startup schema upgrades to complete before testing. The AppHost uses a persistent SQL Server data volume; discard it only when you intentionally want to lose the existing local data.
+If you already ran an older version of the sample, allow startup schema upgrades to complete before testing. The AppHost defaults to a persistent PostgreSQL volume and `UseNpgsql`. Set `SqlOS:DatabaseProvider=SqlServer` to keep the SQL Server path. Discard the Aspire data volume only when you intentionally want to lose the existing local data.
 
 ## ASP.NET Core web client
 
