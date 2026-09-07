@@ -24,10 +24,10 @@ dotnet run --project examples/SqlOS.Todo.AppHost/SqlOS.Todo.AppHost.csproj
 
 The API calls `UseNpgsql` for the AppHost connection string. Set `SqlOS:DatabaseProvider=SqlServer` to start SQL Server instead.
 
-Prove the Postgres path with the Playwright suite:
+Prove the Postgres path with the Playwright suite (hosted signup into the Razor client, plus the real Todo CLI through the device-approve journey):
 
 ```bash
-./scripts/todo-postgres-e2e.sh
+./scripts/todo-e2e.sh
 ```
 
 Or run the broader Aspire stack and get the Todo app there too:

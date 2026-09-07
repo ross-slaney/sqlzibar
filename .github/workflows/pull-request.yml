@@ -306,8 +306,8 @@ jobs:
           name: e2e-failure-screenshots
           path: examples/SqlOS.SignInWithX.E2eTests/bin/Release/net9.0/TestResults/**
 
-  todo-postgres-e2e:
-    name: Todo PostgreSQL E2E
+  todo-e2e:
+    name: Todo Web + CLI E2E (PostgreSQL)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -324,10 +324,10 @@ jobs:
             ${{ runner.os }}-nuget-
       - run: docker pull postgres:16
         continue-on-error: true
-      - run: chmod +x scripts/*.sh && ./scripts/todo-postgres-e2e.sh
-      - name: Upload Todo PostgreSQL e2e screenshots
+      - run: chmod +x scripts/*.sh && ./scripts/todo-e2e.sh
+      - name: Upload Todo e2e screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: todo-postgres-e2e-screenshots
+          name: todo-e2e-screenshots
           path: examples/SqlOS.Todo.E2eTests/bin/Release/net9.0/TestResults/**

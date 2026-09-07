@@ -12,17 +12,18 @@ namespace SqlOS.Todo.E2eTests;
 /// real Todo app host (Postgres container + Todo API + Razor client) on
 /// alternate ports so a manually running demo on 5080/5090 is left untouched,
 /// then drives Chromium through hosted AuthPage signup and the signed-in
-/// ASP.NET Core session. Success screenshots land in TestResults for the PR.
+/// ASP.NET Core session, and runs the real Todo CLI binary through the
+/// device-approve journey. Success screenshots land in TestResults for the PR.
 /// </summary>
 [TestClass]
-public sealed class TodoPostgresE2eTests
+public sealed class TodoE2eTests
 {
     // Deliberately different from the demo's 5080/5090.
     private const int ApiPort = 5180;
     private const int WebPort = 5190;
     private const string Password = "TodoE2ePassword123!";
 
-    private static readonly string ApiOrigin = $"http://localhost:{ApiPort}";
+    internal static readonly string ApiOrigin = $"http://localhost:{ApiPort}";
     private static readonly string WebOrigin = $"http://localhost:{WebPort}";
     private static readonly TimeSpan StartupBudget = TimeSpan.FromMinutes(
         int.TryParse(Environment.GetEnvironmentVariable("TODO_E2E_STARTUP_MINUTES"), out var minutes) ? minutes : 6);
@@ -97,20 +98,110 @@ public sealed class TodoPostgresE2eTests
         await Assertions.Expect(page.GetByLabel("Display name")).ToBeVisibleAsync();
         await CaptureScreenshotAsync(page, "authpage-signup");
 
-        await page.GetByLabel("Display name").FillAsync("Todo E2E");
-        await page.GetByLabel("Email").FillAsync(email);
-        await page.GetByLabel("Password", new() { Exact = true }).FillAsync(Password);
-        await page.GetByLabel("Organization name").FillAsync($"Todo Org {Guid.NewGuid():N}"[..24]);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Create account" }).ClickAsync();
-
-        await CompleteOrganizationSelectionIfNeededAsync(page);
+        await SubmitSignupFormAsync(page, email);
         await ExpectSignedInAsync(page, email);
         await CaptureScreenshotAsync(page, "signed-in-razor");
+    });
+
+    /// <summary>
+    /// The terminal journey, driven by the real CLI binary: `login` starts the
+    /// device grant and prints the verification URL, the browser creates an
+    /// account and approves the device, the CLI observes the approval and
+    /// persists tokens, and later CLI commands use those tokens against the API.
+    /// </summary>
+    [TestMethod]
+    public Task CliLogin_ApprovedInBrowser_ThenCliCommandsWork() => RunWithBrowserAsync(async page =>
+    {
+        var email = NewEmail();
+        var tokenHome = NewTokenHome();
+        var todoTitle = $"From the CLI {Guid.NewGuid():N}"[..28];
+
+        await using var login = CliProcess.Start(tokenHome, "login");
+        var verificationUrl = await login.WaitForVerificationUrlAsync(TimeSpan.FromSeconds(60));
+        StringAssert.StartsWith(verificationUrl, $"{ApiOrigin}/sqlos/auth/device", "the CLI must print the hosted device URL for the e2e API origin");
+        Assert.IsFalse(File.Exists(Path.Combine(tokenHome, "tokens.json")), "no tokens may exist before approval");
+
+        await page.GotoAsync(verificationUrl);
+        await Assertions.Expect(page.GetByText("Sign in to approve CLI access for Todo CLI.")).ToBeVisibleAsync();
+        await page.GetByRole(AriaRole.Link, new() { Name = "Get started" }).ClickAsync();
+        await SubmitSignupFormAsync(page, email);
+
+        await Assertions.Expect(page.Locator(".panel-kicker")).ToHaveTextAsync("Approve CLI Access", new() { Timeout = 60_000 });
+        await Assertions.Expect(page.GetByText("Todo CLI").First).ToBeVisibleAsync();
+        await CaptureScreenshotAsync(page, "authpage-device-approve");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Approve CLI access" }).ClickAsync();
+        await Assertions.Expect(page.GetByText("CLI access approved.")).ToBeVisibleAsync();
+        await CaptureScreenshotAsync(page, "authpage-device-approved");
+
+        var loginResult = await login.WaitForExitAsync(TimeSpan.FromSeconds(90));
+        Assert.AreEqual(0, loginResult.ExitCode, $"login should exit 0 after approval.\n{loginResult}");
+        StringAssert.Contains(loginResult.StandardOutput, "Signed in.", loginResult.ToString());
+        Assert.IsTrue(File.Exists(Path.Combine(tokenHome, "tokens.json")), "login must persist tokens in the configured CLI home");
+
+        var whoami = await CliProcess.RunAsync(tokenHome, "whoami");
+        Assert.AreEqual(0, whoami.ExitCode, whoami.ToString());
+        StringAssert.Contains(whoami.StandardOutput, email, "whoami must echo the signed-in email from /api/me");
+
+        var add = await CliProcess.RunAsync(tokenHome, "add", todoTitle);
+        Assert.AreEqual(0, add.ExitCode, add.ToString());
+        StringAssert.Contains(add.StandardOutput, todoTitle, add.ToString());
+
+        var list = await CliProcess.RunAsync(tokenHome, "list");
+        Assert.AreEqual(0, list.ExitCode, list.ToString());
+        StringAssert.Contains(list.StandardOutput, todoTitle, "list must show the todo created with the device-grant token");
+
+        var logout = await CliProcess.RunAsync(tokenHome, "logout");
+        Assert.AreEqual(0, logout.ExitCode, logout.ToString());
+        Assert.IsFalse(File.Exists(Path.Combine(tokenHome, "tokens.json")), "logout must delete the token file");
+
+        var listAfterLogout = await CliProcess.RunAsync(tokenHome, "list");
+        Assert.AreEqual(1, listAfterLogout.ExitCode, "commands after logout must fail");
+        StringAssert.Contains(listAfterLogout.StandardError, "Not signed in", listAfterLogout.ToString());
+    });
+
+    [TestMethod]
+    public Task CliLogin_DeniedInBrowser_FailsWithoutTokens() => RunWithBrowserAsync(async page =>
+    {
+        var email = NewEmail();
+        var tokenHome = NewTokenHome();
+
+        await using var login = CliProcess.Start(tokenHome, "login");
+        var verificationUrl = await login.WaitForVerificationUrlAsync(TimeSpan.FromSeconds(60));
+
+        await page.GotoAsync(verificationUrl);
+        await page.GetByRole(AriaRole.Link, new() { Name = "Get started" }).ClickAsync();
+        await SubmitSignupFormAsync(page, email);
+
+        await Assertions.Expect(page.Locator(".panel-kicker")).ToHaveTextAsync("Approve CLI Access", new() { Timeout = 60_000 });
+        await page.GetByRole(AriaRole.Button, new() { Name = "Deny request" }).ClickAsync();
+        await Assertions.Expect(page.GetByText("CLI access was denied.")).ToBeVisibleAsync();
+
+        var loginResult = await login.WaitForExitAsync(TimeSpan.FromSeconds(90));
+        Assert.AreEqual(1, loginResult.ExitCode, $"login should fail after denial.\n{loginResult}");
+        StringAssert.Contains(loginResult.StandardError, "Sign-in was denied in the browser.", loginResult.ToString());
+        Assert.IsFalse(File.Exists(Path.Combine(tokenHome, "tokens.json")), "a denied login must not persist tokens");
     });
 
     // ---- journey helpers -------------------------------------------------
 
     private static string NewEmail() => $"e2e-{Guid.NewGuid():N}@todo.test";
+
+    private string NewTokenHome()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "sqlos-todo-cli-e2e", $"{TestContext.TestName}-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private static async Task SubmitSignupFormAsync(IPage page, string email)
+    {
+        await page.GetByLabel("Display name").FillAsync("Todo E2E");
+        await page.GetByLabel("Email").FillAsync(email);
+        await page.GetByLabel("Password", new() { Exact = true }).FillAsync(Password);
+        await page.GetByLabel("Organization name").FillAsync($"Todo Org {Guid.NewGuid():N}"[..24]);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Create account" }).ClickAsync();
+        await CompleteOrganizationSelectionIfNeededAsync(page);
+    }
 
     private static async Task CompleteOrganizationSelectionIfNeededAsync(IPage page)
     {

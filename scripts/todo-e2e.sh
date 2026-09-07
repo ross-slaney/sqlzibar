@@ -1,6 +1,8 @@
 #!/bin/bash
-# Browser end-to-end tests for the Todo sample on PostgreSQL. Single entry
-# point for the "Todo PostgreSQL E2E" CI job and for local runs.
+# Browser end-to-end tests for the Todo sample on PostgreSQL: hosted signup
+# into the Razor client, and the real Todo CLI binary through the
+# device-approve journey. Single entry point for the "Todo Web + CLI E2E (PostgreSQL)"
+# CI job and for local runs.
 #
 # Needs Docker (Postgres container) and the .NET SDK. Boots on alternate
 # ports (5180/5190) so a running demo on 5080/5090 is not disturbed.
