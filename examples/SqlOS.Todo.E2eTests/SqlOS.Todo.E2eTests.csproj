@@ -17,5 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SqlOS.Todo.AppHost\SqlOS.Todo.AppHost.csproj" />
+    <!-- Builds the real CLI next to the tests so the device-approve journey can run SqlOS.Todo.Cli.dll as a child process. -->
+    <ProjectReference Include="..\SqlOS.Todo.Cli\SqlOS.Todo.Cli.csproj" />
   </ItemGroup>
 </Project>

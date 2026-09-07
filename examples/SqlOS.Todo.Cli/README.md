@@ -129,6 +129,15 @@ The target must expose the Todo sample's `/sample/config` contract and authoriza
 
 After login, the token file remembers the discovered API base and uses that same origin for later refresh discovery. `SQLOS_TODO_API_ORIGIN` selects the target for a new login; sign in again when moving between environments.
 
+## Headless terminals
+
+`login` prints `verification_uri_complete` and then tries to open it with the platform opener. Pass `--no-browser` or set `SQLOS_TODO_CLI_NO_BROWSER=1` to skip the launch and only print the URL, for example over SSH or in automation:
+
+```bash
+SQLOS_TODO_CLI_NO_BROWSER=1 \
+dotnet run --project examples/SqlOS.Todo.Cli/SqlOS.Todo.Cli.csproj -- login
+```
+
 ## Token storage and logout
 
 Tokens are serialized as readable JSON at:
@@ -136,6 +145,8 @@ Tokens are serialized as readable JSON at:
 ```text
 ~/.sqlos/todo-cli/tokens.json
 ```
+
+Set `SQLOS_TODO_CLI_HOME=<directory>` to store `tokens.json` somewhere else, for example one directory per environment or a throwaway directory for tests.
 
 The record contains API base, issuer, client ID, resource, access token, refresh token, and access-token expiry. The sample creates the directory and file but does not add operating-system keychain protection or explicit file-permission hardening.
 
@@ -157,7 +168,15 @@ Run the Todo integration suite with Docker available:
 dotnet test examples/SqlOS.Todo.IntegrationTests/SqlOS.Todo.IntegrationTests.csproj
 ```
 
-The suite covers the Todo API's hosted/headless auth, device authorization protocol, audience/resource validation, FGA, CIMD, and DCR behavior. It does not launch the CLI executable itself, so perform at least one manual `login` and `list` smoke test after changing CLI polling, browser launch, or local token storage.
+The suite covers the Todo API's hosted/headless auth, audience/resource validation, FGA, CIMD, and DCR behavior over HTTP. It does not launch the CLI executable.
+
+The CLI binary itself is covered by the Playwright suite in [`examples/SqlOS.Todo.E2eTests`](../SqlOS.Todo.E2eTests/TodoPostgresE2eTests.cs), which CI runs as the `Todo PostgreSQL E2E` job:
+
+```bash
+./scripts/todo-postgres-e2e.sh
+```
+
+It boots the Todo app host on PostgreSQL, runs the built `SqlOS.Todo.Cli.dll` as a child process with `SQLOS_TODO_API_ORIGIN`, `SQLOS_TODO_CLI_NO_BROWSER=1`, and a temporary `SQLOS_TODO_CLI_HOME`, reads the verification URL from stdout, creates an account and approves (or denies) the request in Chromium, and then asserts that `login` exits with tokens, `whoami`/`add`/`list` work with them, `logout` removes them, and a denied login exits non-zero without writing tokens. Your real `~/.sqlos/todo-cli` is never touched.
 
 ## Reset and troubleshooting
 
@@ -167,7 +186,7 @@ The token file is absent or unreadable. Start the backend and run `login`.
 
 ### The browser did not open
 
-Use the printed `verification_uri_complete` URL. Headless terminals and minimal Linux installations may not provide a supported opener.
+Use the printed `verification_uri_complete` URL. Headless terminals and minimal Linux installations may not provide a supported opener; pass `--no-browser` to skip the attempt.
 
 ### Device code expired
 

@@ -4,8 +4,11 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-var command = args.FirstOrDefault()?.ToLowerInvariant() ?? "help";
-var commandArgs = args.Skip(1).ToArray();
+var noBrowser = args.Contains("--no-browser", StringComparer.OrdinalIgnoreCase)
+    || IsTruthy(Environment.GetEnvironmentVariable("SQLOS_TODO_CLI_NO_BROWSER"));
+var positional = args.Where(arg => !arg.Equals("--no-browser", StringComparison.OrdinalIgnoreCase)).ToArray();
+var command = positional.FirstOrDefault()?.ToLowerInvariant() ?? "help";
+var commandArgs = positional.Skip(1).ToArray();
 using var http = new HttpClient();
 
 try
@@ -13,7 +16,7 @@ try
     switch (command)
     {
         case "login":
-            await LoginAsync(http);
+            await LoginAsync(http, noBrowser);
             break;
         case "logout":
             TokenStore.Delete();
@@ -52,7 +55,7 @@ catch (Exception ex)
     Environment.ExitCode = 1;
 }
 
-static async Task LoginAsync(HttpClient http)
+static async Task LoginAsync(HttpClient http, bool noBrowser)
 {
     var discovery = await DiscoverAsync(http);
     var scope = string.Join(' ', discovery.AllowedScopes);
@@ -71,7 +74,10 @@ static async Task LoginAsync(HttpClient http)
     Console.WriteLine(start.VerificationUriComplete);
     Console.WriteLine();
     Console.WriteLine($"Device code: {start.UserCode}");
-    TryOpenBrowser(start.VerificationUriComplete);
+    if (!noBrowser)
+    {
+        TryOpenBrowser(start.VerificationUriComplete);
+    }
 
     var interval = Math.Max(1, start.Interval);
     var expiresAt = DateTimeOffset.UtcNow.AddSeconds(start.ExpiresIn);
@@ -287,13 +293,19 @@ static void TryOpenBrowser(string url)
     }
 }
 
+static bool IsTruthy(string? value)
+    => value is not null
+        && (value.Equals("1", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("yes", StringComparison.OrdinalIgnoreCase));
+
 static void PrintHelp()
 {
     Console.WriteLine("""
     SqlOS Todo CLI
 
     Commands:
-      login
+      login [--no-browser]
       logout
       whoami
       list
@@ -302,6 +314,8 @@ static void PrintHelp()
 
     Environment:
       SQLOS_TODO_API_ORIGIN=http://localhost:5080
+      SQLOS_TODO_CLI_NO_BROWSER=1   print the sign-in URL without launching a browser
+      SQLOS_TODO_CLI_HOME=<dir>     store tokens under <dir> instead of ~/.sqlos/todo-cli
     """);
 }
 
@@ -352,10 +366,14 @@ public static class CliJson
 
 public static class TokenStore
 {
-    private static readonly string DirectoryPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".sqlos",
-        "todo-cli");
+    // SQLOS_TODO_CLI_HOME lets tests and multi-profile setups keep tokens away
+    // from the real ~/.sqlos/todo-cli file.
+    private static readonly string DirectoryPath = Environment.GetEnvironmentVariable("SQLOS_TODO_CLI_HOME") is { Length: > 0 } home
+        ? home
+        : Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".sqlos",
+            "todo-cli");
 
     private static readonly string FilePath = Path.Combine(DirectoryPath, "tokens.json");
 
