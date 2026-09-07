@@ -94,7 +94,6 @@ builder.AddSqlOS<AppDbContext>(options =>
 
 var app = builder.Build();
 app.UseCors("relaydesk-auth");
-app.MapSqlOS();
 ```
 
 `BuildUiUrl` is the mode switch. When it exists, `/sqlos/auth/authorize` redirects browser interaction to your page. There is no separate dashboard toggle.

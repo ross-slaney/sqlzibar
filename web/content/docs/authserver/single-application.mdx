@@ -19,13 +19,50 @@ builder.AddSqlOS<AppDbContext>(options =>
 
 This expands into the same seeded client records SqlOS already uses. It does not create a separate runtime path.
 
+## Describe the whole application in one call
+
+The same description can carry the application's protected surfaces, branding, and authorization model. SqlOS derives every protocol consequence, so `Program.cs` contains no `MapSqlOS`, `RequireSqlOSAccessToken`, `AddMcpServer`, `MapMcp`, or hand-written protected-resource document:
+
+```csharp
+using SqlOS.Mcp; // SqlOS.Mcp package, only needed for app.Mcp(...)
+
+builder.AddSqlOS<AppDbContext>(
+    db => db.UseSqlServer(connectionString),
+    options => options.UseSingleApplication("Todo", app =>
+    {
+        app.Origin = "https://todo.example.com";
+        app.Api = "/api";                                        // protected REST surface
+        app.Mcp("/mcp", mcp => mcp.WithTools<TodoTools>());      // protected MCP surface
+        app.Brand(page => page.PrimaryColor = "#0f172a");        // AuthPage branding seed
+        app.Authorization(fga => fga                             // FGA model seed
+            .ResourceType("todo", "Todo")
+            .Permission("TODO_READ", "Read todos", "todo")
+            .Role("todo_owner", "Owner").Can("TODO_READ"));
+    }));
+
+var app = builder.Build();
+app.MapGet("/api/todos", ...);   // already protected
+app.Run();
+```
+
+| Declaration | What SqlOS does |
+| --- | --- |
+| `Api = "/api"` | Validates bearer tokens for the audience `{Origin}/api` on every request under `/api` (401 with a Bearer challenge otherwise), serves `/.well-known/oauth-protected-resource`, and uses `{Origin}/api` as the first-party client's default audience. |
+| `Mcp("/mcp", ...)` | Validates tokens for `{Origin}/mcp` under `/mcp`, serves `/.well-known/oauth-protected-resource/mcp`, enables client ID metadata documents and resource indicators for portable MCP clients, and hosts the MCP server there. See [MCP server](/docs/authserver/mcp-server). |
+| `Brand(...)` | Forwards to `AuthServer.SeedAuthPage` on top of the single-application defaults. |
+| `Authorization(...)` | Forwards to `Fga.Seed`. |
+
+The auth server, hosted sign-in pages, and dashboard are mapped by `AddSqlOS` at startup. `app.MapSqlOS()` is obsolete; calling it remains safe and idempotent and logs one warning.
+
+Surface paths are validated at startup: they must be absolute, non-root, distinct and non-nested, and must not overlap `/.well-known`, the auth base path, or `DashboardBasePath`. `Api` and `Mcp` are separate audiences, so a token minted for `/api` is rejected at `/mcp` and vice versa. Nested `RequireSqlOSAccessToken` groups under a declared surface reuse the already validated token and only add scope enforcement.
+
 ## Defaults
 
 | Setting | Default |
 | --- | --- |
 | Application name | The provided name |
 | Client ID | Stable slug from the name, such as `todo` |
-| Audience | Same as the client ID |
+| Audience | `{Origin}{Api}` when `Api` is set; otherwise the client ID |
 | Redirect URI | `{Origin}/auth/callback` |
 | Client type | `public_pkce` |
 | PKCE | Required, S256 only |
@@ -35,7 +72,7 @@ This expands into the same seeded client records SqlOS already uses. It does not
 | Email application name | `{ApplicationName}` |
 | Application access | `all_organizations` |
 
-Single-application mode also keeps `DCR`, `CIMD`, and resource indicators off until you opt into those advanced features.
+Single-application mode keeps `DCR` off, and keeps `CIMD` and resource indicators off unless you declare an `Mcp` surface (which needs both for portable MCP clients) or opt in explicitly.
 
 ## Overrides
 
@@ -68,7 +105,8 @@ Deployment-friendly projects can bind from configuration:
       "Name": "Todo",
       "Origin": "https://todo.example.com",
       "ClientId": "todo-web",
-      "Audience": "https://todo.example.com/api",
+      "Api": "/api",
+      "Mcp": "/mcp",
       "RedirectPath": "/auth/callback"
     }
   }
@@ -81,6 +119,8 @@ builder.AddSqlOS<AppDbContext>(options =>
     options.UseSingleApplication(builder.Configuration);
 });
 ```
+
+`Api` and `Mcp` bind the same way as in code. Hosting the MCP server itself still requires the `app.Mcp(path, configure)` call from `SqlOS.Mcp`, since tool registration is code.
 
 ## When to graduate
 

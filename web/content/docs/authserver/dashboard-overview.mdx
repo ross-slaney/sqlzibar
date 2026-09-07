@@ -9,7 +9,7 @@ The dashboard is admin UI inside your app. It covers AuthServer, Audit Logs, com
 
 ## Accessing the dashboard
 
-Default path is `DashboardBasePath` (`/sqlos`). Register SqlOS. Call `app.MapSqlOS()` after `Build()`.
+Default path is `DashboardBasePath` (`/sqlos`). Register SqlOS with `AddSqlOS`; the dashboard and its APIs are mapped at startup.
 
 Example: `http://localhost:5062/sqlos/`. Protect it by assigning dashboard options in the `AddSqlOS` callback:
 

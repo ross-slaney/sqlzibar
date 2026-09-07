@@ -56,7 +56,6 @@ builder.AddSqlOS<AppDbContext>(options =>
 });
 
 var app = builder.Build();
-app.MapSqlOS();
 ```
 
 That gives you the simplest path:

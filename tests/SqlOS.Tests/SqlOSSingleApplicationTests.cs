@@ -154,6 +154,273 @@ public sealed class SqlOSSingleApplicationTests
     }
 
     [TestMethod]
+    public void SingleApplication_ApiSurface_DerivesAudienceWithoutEnablingCimdOrResourceIndicators()
+    {
+        var options = new SqlOSAuthServerOptions();
+        options.UseSingleApplication("Todo", app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Api = "/api/";
+        });
+
+        SqlOSSingleApplicationSurfaces.ResolveApiAudience(options.SingleApplication).Should().Be("https://todo.example.com/api");
+        SqlOSSingleApplicationSurfaces.ResolveClientAudience(options.SingleApplication!, "todo").Should().Be("https://todo.example.com/api");
+        options.ClientRegistration.Cimd.Enabled.Should().BeFalse();
+        options.ClientRegistration.Dcr.Enabled.Should().BeFalse();
+        options.ResourceIndicators.Enabled.Should().BeFalse();
+        options.DefaultAudience.Should().Be("sqlos");
+
+        var surface = SqlOSSingleApplicationSurfaces.Describe(options.SingleApplication).Should().ContainSingle().Subject;
+        surface.Kind.Should().Be(SqlOSSingleApplicationSurfaceKind.Api);
+        surface.Path.Should().Be("/api");
+        surface.Realm.Should().Be("Todo API");
+        surface.MetadataUrl.Should().Be("https://todo.example.com/.well-known/oauth-protected-resource");
+    }
+
+    [TestMethod]
+    public async Task SingleApplication_ApiSurface_SeedsFirstPartyClientWithApiAudience()
+    {
+        await using var harness = CreateHarness(options =>
+            options.UseSingleApplication("Todo", app =>
+            {
+                app.Origin = "https://todo.example.com";
+                app.Api = "/api";
+            }));
+
+        await harness.Admin.UpsertSeededClientsAsync();
+
+        var client = await harness.Context.Set<SqlOSClientApplication>().SingleAsync();
+        client.Audience.Should().Be("https://todo.example.com/api");
+    }
+
+    [TestMethod]
+    public void SingleApplication_McpSurface_EnablesCimdAndResourceIndicatorsButNotDcr()
+    {
+        var options = new SqlOSAuthServerOptions();
+        options.UseSingleApplication("Todo", app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Mcp = "/mcp";
+        });
+
+        options.ClientRegistration.Cimd.Enabled.Should().BeTrue();
+        options.ResourceIndicators.Enabled.Should().BeTrue();
+        options.ClientRegistration.Dcr.Enabled.Should().BeFalse();
+        options.DefaultAudience.Should().Be("https://todo.example.com/mcp");
+        SqlOSSingleApplicationSurfaces.ResolveMcpAudience(options.SingleApplication).Should().Be("https://todo.example.com/mcp");
+
+        var surface = SqlOSSingleApplicationSurfaces.Describe(options.SingleApplication).Should().ContainSingle().Subject;
+        surface.Kind.Should().Be(SqlOSSingleApplicationSurfaceKind.Mcp);
+        surface.Realm.Should().Be("Todo MCP");
+        surface.MetadataUrl.Should().Be("https://todo.example.com/.well-known/oauth-protected-resource/mcp");
+    }
+
+    [TestMethod]
+    public void SingleApplication_McpSurface_KeepsExplicitDefaultAudience()
+    {
+        var options = new SqlOSAuthServerOptions { DefaultAudience = "custom-audience" };
+        options.UseSingleApplication("Todo", app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Mcp = "/mcp";
+        });
+
+        options.DefaultAudience.Should().Be("custom-audience");
+    }
+
+    [TestMethod]
+    public void SingleApplication_BrandAndAuthorization_ForwardToAuthPageAndFgaSeeds()
+    {
+        var options = new SqlOSOptions();
+        options.AuthServer.UseSingleApplication("Todo", app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Brand(brand =>
+            {
+                brand.PrimaryColor = "#123456";
+                brand.PageSubtitle = "Branded subtitle";
+            });
+            app.Authorization(fga => fga
+                .ResourceType("todo", "Todo")
+                .Permission("todo.read", "Read todos", "todo"));
+        });
+        SqlOSSingleApplicationSurfaces.ApplyHostConfiguration(options);
+
+        options.AuthServer.AuthPageSeed.Should().NotBeNull();
+        options.AuthServer.AuthPageSeed!.PrimaryColor.Should().Be("#123456");
+        options.AuthServer.AuthPageSeed.PageSubtitle.Should().Be("Branded subtitle");
+        options.AuthServer.AuthPageSeed.PageTitle.Should().Be("Sign in to Todo");
+        options.Fga.StartupSeedData.Should().NotBeNull();
+        options.Fga.StartupSeedData!.Permissions.Should().ContainSingle(permission => permission.Key == "todo.read");
+        options.AuthServer.SingleApplication!.AuthorizationConfigurations.Should().BeEmpty("ApplyHostConfiguration is idempotent");
+    }
+
+    [TestMethod]
+    public void SingleApplication_ConfigurationBinding_ReadsApiAndMcp()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["SqlOS:Application:Name"] = "Todo",
+                ["SqlOS:Application:Origin"] = "https://todo.example.com",
+                ["SqlOS:Application:Api"] = "/api",
+                ["SqlOS:Application:Mcp"] = "/mcp"
+            })
+            .Build();
+
+        var options = new SqlOSAuthServerOptions();
+        options.UseSingleApplication(configuration);
+
+        options.SingleApplication!.Api.Should().Be("/api");
+        options.SingleApplication.Mcp.Should().Be("/mcp");
+        options.ClientRegistration.Cimd.Enabled.Should().BeTrue();
+        options.ResourceIndicators.Enabled.Should().BeTrue();
+    }
+
+    [DataTestMethod]
+    [DataRow("api", null, "must be an absolute path prefix starting with '/'")]
+    [DataRow("/", null, "cannot be '/'")]
+    [DataRow("", null, "cannot be empty")]
+    [DataRow("/api?x=1", null, "without query string or fragment")]
+    [DataRow("/.well-known/api", null, "cannot be under '/.well-known'")]
+    [DataRow("/sqlos/api", null, "must not be equal to or under DashboardBasePath")]
+    [DataRow("/sqlos/auth/api", null, "must not be equal to or under DashboardBasePath")]
+    [DataRow("/api", "/api", "must be distinct, non-nested path prefixes")]
+    [DataRow("/api", "/api/mcp", "must be distinct, non-nested path prefixes")]
+    [DataRow("/api/v1", "/api", "must be distinct, non-nested path prefixes")]
+    public void SingleApplication_SurfaceValidation_RejectsInvalidPaths(string api, string? mcp, string expectedMessage)
+    {
+        var act = () => ValidateHost(app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Api = api;
+            app.Mcp = mcp;
+        });
+
+        act.Should().Throw<InvalidOperationException>().Which.Message.Should().Contain(expectedMessage);
+    }
+
+    [TestMethod]
+    public void SingleApplication_SurfaceValidation_McpUnderDashboardBasePath_NamesMcp()
+    {
+        var act = () => ValidateHost(app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Mcp = "/sqlos/mcp";
+        });
+
+        act.Should().Throw<InvalidOperationException>().Which.Message.Should()
+            .Contain("AuthServer.SingleApplication.Mcp ('/sqlos/mcp') must not be equal to or under DashboardBasePath");
+    }
+
+    [DataTestMethod]
+    [DataRow(null)]
+    [DataRow("todo.example.com")]
+    [DataRow("https://todo.example.com/base")]
+    [DataRow("https://todo.example.com?x=1")]
+    public void SingleApplication_SurfaceValidation_RequiresAbsoluteOriginWithoutPath(string? origin)
+    {
+        var act = () => ValidateHost(app =>
+        {
+            app.Origin = origin;
+            app.Api = "/api";
+        });
+
+        act.Should().Throw<InvalidOperationException>().Which.Message.Should()
+            .Contain("AuthServer.SingleApplication.Origin must be an absolute http(s) origin");
+    }
+
+    [TestMethod]
+    public void SingleApplication_SurfaceValidation_RejectsAudienceThatDisagreesWithApi()
+    {
+        var act = () => ValidateHost(app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Api = "/api";
+            app.Audience = "todo";
+        });
+
+        act.Should().Throw<InvalidOperationException>().Which.Message.Should()
+            .Contain("AuthServer.SingleApplication.Audience must be 'https://todo.example.com/api'");
+    }
+
+    [TestMethod]
+    public void SingleApplication_SurfaceValidation_AcceptsMatchingExplicitAudience()
+    {
+        var act = () => ValidateHost(app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Api = "/api";
+            app.Audience = "https://todo.example.com/api";
+        });
+
+        act.Should().NotThrow();
+    }
+
+    [TestMethod]
+    public void SingleApplication_SurfaceValidation_RejectsCimdDisabledAfterMcpDeclared()
+    {
+        var act = () => ValidateHost(
+            app =>
+            {
+                app.Origin = "https://todo.example.com";
+                app.Mcp = "/mcp";
+            },
+            options => options.AuthServer.ClientRegistration.Cimd.Enabled = false);
+
+        act.Should().Throw<InvalidOperationException>().Which.Message.Should()
+            .Contain("AuthServer.SingleApplication.Mcp is set but AuthServer.ClientRegistration.Cimd.Enabled is false");
+    }
+
+    [TestMethod]
+    public void SingleApplication_SurfaceValidation_RejectsResourceIndicatorsDisabledAfterMcpDeclared()
+    {
+        var act = () => ValidateHost(
+            app =>
+            {
+                app.Origin = "https://todo.example.com";
+                app.Mcp = "/mcp";
+            },
+            options => options.AuthServer.ResourceIndicators.Enabled = false);
+
+        act.Should().Throw<InvalidOperationException>().Which.Message.Should()
+            .Contain("AuthServer.SingleApplication.Mcp is set but AuthServer.ResourceIndicators.Enabled is false");
+    }
+
+    [TestMethod]
+    public void SingleApplication_SurfaceValidation_AcceptsApiAndMcpTogether()
+    {
+        var act = () => ValidateHost(app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Api = "/api";
+            app.Mcp = "/mcp";
+        });
+
+        act.Should().NotThrow();
+    }
+
+    [TestMethod]
+    public void SingleApplication_NoSurfaces_DoesNotRequireOrigin()
+    {
+        var act = () => ValidateHost(app => app.Origin = "https://todo.example.com/base");
+
+        act.Should().NotThrow();
+    }
+
+    private static void ValidateHost(
+        Action<SqlOSSingleApplicationOptions> configureApplication,
+        Action<SqlOSOptions>? configureAfter = null)
+    {
+        var options = new SqlOSOptions();
+        options.AuthServer.UseSingleApplication("Todo", configureApplication);
+        configureAfter?.Invoke(options);
+        SqlOSPathDefaults.Apply(options);
+        SqlOSSingleApplicationSurfaces.ApplyHostConfiguration(options);
+        SqlOSOptionsValidator.ValidateOrThrow(options);
+    }
+
+    [TestMethod]
     public async Task SingleApplication_ExistingAdvancedSeeds_StillWork()
     {
         await using var harness = CreateHarness(options =>

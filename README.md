@@ -14,11 +14,12 @@ builder.AddSqlOS<AppDbContext>(
     options => options.UseSingleApplication("Acme", app =>
     {
         app.Origin = "http://localhost:5050";
-        app.Audience = "http://localhost:5050/api";
+        app.Api = "/api";                                     // bearer tokens required under /api
+        app.Mcp("/mcp", mcp => mcp.WithTools<AcmeTools>());   // hosted MCP server (SqlOS.Mcp package)
     }));
 ```
 
-That's a working auth server with hosted login at `/sqlos/auth/login` and a dashboard at `/sqlos`.
+That's a working auth server with hosted login at `/sqlos/auth/login`, a dashboard at `/sqlos`, a token-protected API under `/api`, and an OAuth-protected MCP server at `/mcp` that Codex, ChatGPT, Claude, and Cursor can connect to. No `MapSqlOS`, `RequireSqlOSAccessToken`, `AddMcpServer`, or `MapMcp` calls; SqlOS derives the protocol consequences from the description.
 
 **SQL Server or PostgreSQL — you choose.** One package, one `AddSqlOS` registration. Switch `UseSqlServer` for `UseNpgsql` and SqlOS loads the matching schema, locks, and FGA functions. There is no second NuGet package or dashboard toggle. [Provider guide](https://sqlos.dev/docs/guides/choosing-a-provider).
 
@@ -121,6 +122,7 @@ Derive your `DbContext` from `SqlOSDbContext<TContext>` so SqlOS can register it
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using SqlOS;
+using SqlOS.AuthServer.Extensions;
 using SqlOS.Configuration;
 using SqlOS.Extensions;
 
@@ -142,7 +144,7 @@ builder.AddSqlOS<AppDbContext>(
         options.UseSingleApplication("Acme", app =>
         {
             app.Origin = appOrigin;
-            app.Audience = $"{appOrigin}/api";
+            app.Api = "/api";
         });
 
         options.Dashboard.AuthMode = SqlOSDashboardAuthMode.Password;
@@ -151,8 +153,8 @@ builder.AddSqlOS<AppDbContext>(
 
 var app = builder.Build();
 
-app.MapSqlOS();
 app.MapGet("/", () => "SqlOS is running");
+app.MapGet("/api/me", (HttpContext http) => http.GetSqlOSValidatedToken()!.UserId); // already protected
 
 app.Run();
 

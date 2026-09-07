@@ -11,7 +11,7 @@ section: quickstarts
   href="#complete-program"
   actionLabel="View the code"
 >
-  Apply `RequireSqlOSAccessToken` to a route group. SqlOS validates signature, lifetime, audience, and persisted session existence/revocation/absolute expiry before your endpoint runs.
+  Declare `app.Api = "/api"` inside `UseSingleApplication`. SqlOS validates signature, lifetime, audience, and persisted session existence/revocation/absolute expiry for every request under `/api` before your endpoint runs.
 </Banner>
 
 ## Goal
@@ -27,7 +27,7 @@ Add `/api/me` to a one-application SqlOS host. Requests without a bearer token r
 
 ## Complete program
 
-This is the complete `Program.cs` from the one-app quickstart with an audience-protected route group added:
+This is the complete `Program.cs` from the one-app quickstart with the API surface declared:
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +43,6 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
         "Connection string 'DefaultConnection' was not configured.");
 
 const string publicOrigin = "http://localhost:5050";
-const string apiAudience = $"{publicOrigin}/api";
 var dashboardPassword = builder.Configuration["SqlOS:Dashboard:Password"]
     ?? throw new InvalidOperationException(
         "Configure SqlOS:Dashboard:Password with user secrets or your secret store.");
@@ -52,14 +51,11 @@ builder.AddSqlOS<AppDbContext>(
     db => db.UseSqlServer(connectionString),
     options =>
     {
-        options.AuthServer.PublicOrigin = publicOrigin;
-        options.AuthServer.Issuer = $"{publicOrigin}/sqlos/auth";
-
         options.UseSingleApplication("Acme", app =>
         {
             app.Origin = publicOrigin;
             app.ClientId = "acme-web";
-            app.Audience = apiAudience;
+            app.Api = "/api"; // audience {Origin}/api, protected-resource metadata, bearer challenge
         });
 
         options.Dashboard.AuthMode = SqlOSDashboardAuthMode.Password;
@@ -68,14 +64,8 @@ builder.AddSqlOS<AppDbContext>(
 
 var app = builder.Build();
 
-app.MapSqlOS();
-
-var api = app.MapGroup("/api")
-    .RequireSqlOSAccessToken(options =>
-    {
-        options.ExpectedAudience = apiAudience;
-        options.Realm = "Acme API";
-    });
+// Already protected: SqlOS validated the token for http://localhost:5050/api.
+var api = app.MapGroup("/api");
 
 api.MapGet("/me", (HttpContext http) =>
 {
@@ -102,9 +92,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 }
 ```
 
-`RequireSqlOSAccessToken` is an endpoint filter on the route group. After validation it sets `HttpContext.User` and stores the typed `SqlOSValidatedToken`, available through `GetSqlOSValidatedToken()`.
+Declaring `Api` makes SqlOS validate every request under `/api` for the audience `http://localhost:5050/api`, use that audience for the `acme-web` client, serve `/.well-known/oauth-protected-resource`, and answer unauthenticated requests with a Bearer challenge that names `realm="Acme API"` and the metadata URL. After validation it sets `HttpContext.User` and stores the typed `SqlOSValidatedToken`, available through `GetSqlOSValidatedToken()`.
 
-When the API also serves delegated (especially third-party) clients, add `options.RequiredScopes = ["your.scope"]` to enforce the client's granted ceiling — a token whose `scope` claim misses a required entry answers `403 insufficient_scope`. Scope bounds the *client*; per-user, per-resource decisions stay with FGA. See [Scopes and Permissions](/docs/authserver/scopes-and-permissions).
+When the API also serves delegated (especially third-party) clients, add scope enforcement on a nested group. It reuses the token SqlOS already validated and only checks scopes — a token whose `scope` claim misses a required entry answers `403 insufficient_scope`:
+
+```csharp
+var writes = app.MapGroup("/api/admin")
+    .RequireSqlOSAccessToken(options =>
+    {
+        options.ExpectedAudience = $"{publicOrigin}/api";
+        options.RequiredScopes = ["acme.admin"];
+    });
+```
+
+Scope bounds the *client*; per-user, per-resource decisions stay with FGA. See [Scopes and Permissions](/docs/authserver/scopes-and-permissions).
+
+`RequireSqlOSAccessToken` remains the explicit alternative for hosts that do not use single-application mode or that protect several audiences; see the [Hosting API](/docs/reference/hosting-api#requiresqlosaccesstoken).
 
 <Callout type="info" title="Audience follows the API, not the login sample">
   The runnable ASP.NET Core sample requests the Todo audience at `http://localhost:5080/api/todos`. When adapting that handler to this standalone host, register and request `http://localhost:5050/api`. A valid token for the Todo API is correctly rejected here.
@@ -152,7 +155,7 @@ The persisted session remains visible to operators, including its user, client, 
 
 ### Every request returns `401`
 
-Compare the token's `aud` claim with `ExpectedAudience`. Audience matching is exact. A token minted for another API is intentionally rejected even when the issuer and user are valid.
+Compare the token's `aud` claim with `{Origin}{Api}` (or `ExpectedAudience` on an explicit group). Audience matching is exact. A token minted for another API is intentionally rejected even when the issuer and user are valid.
 
 ### The bearer token is valid but revoked
 
@@ -160,7 +163,7 @@ SqlOS session-aware validation checks that the persisted session exists and is n
 
 ### `GetSqlOSValidatedToken()` is null
 
-Confirm the endpoint belongs to the route group returned by `MapGroup(...).RequireSqlOSAccessToken(...)` and import `SqlOS.AuthServer.Extensions`.
+Confirm the endpoint's path is under the declared `Api` prefix (or belongs to a `RequireSqlOSAccessToken` group) and import `SqlOS.AuthServer.Extensions`.
 
 ### The browser cannot call the API
 
@@ -171,7 +174,7 @@ Bearer validation does not configure CORS. Add an explicit CORS policy for trust
 - Use an HTTPS audience that identifies the deployed resource server.
 - Keep audiences distinct when separate APIs should not accept each other's tokens.
 - Resolve the acting subject from the validated token or `HttpContext.User`; never trust a subject ID supplied in a request body.
-- For MCP or third-party resource discovery, publish protected-resource metadata and set `ResourceMetadataUrl` in the validation options.
+- For an MCP surface, declare `app.Mcp("/mcp", ...)` next to `Api`; see [MCP server](/docs/authserver/mcp-server). Explicit `RequireSqlOSAccessToken` groups need `ResourceMetadataUrl` set by hand.
 - Use authorization checks in addition to token validation. A valid token identifies the caller; it does not grant access to every application row.
 
 ## Next steps

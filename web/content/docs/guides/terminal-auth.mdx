@@ -41,7 +41,7 @@ The terminal never receives the user's password. The browser completes the same 
 
 ## Before you start
 
-- SqlOS is registered and `app.MapSqlOS()` maps the auth endpoints.
+- SqlOS is registered with `AddSqlOS`, which maps the auth endpoints at startup.
 - The authorization server has a stable public HTTPS origin in production.
 - The target API validates SqlOS access tokens for its exact audience.
 - The CLI can open a browser as a convenience, but still works when the user must copy the printed URL.

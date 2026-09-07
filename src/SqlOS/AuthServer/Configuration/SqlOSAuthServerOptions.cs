@@ -296,8 +296,23 @@ public class SqlOSAuthServerOptions
         }
 
         SingleApplication = application;
-        ClientRegistration.Cimd.Enabled = false;
-        ResourceIndicators.Enabled = false;
+
+        // Single-application mode keeps CIMD and resource indicators off unless the description
+        // declares an MCP surface: portable MCP clients (Codex, ChatGPT desktop, Claude) identify
+        // themselves with client ID metadata documents and bind tokens to the MCP resource.
+        // Declaring `Api` alone changes nothing here; the first-party client simply receives the
+        // API audience. DCR stays an explicit opt-in (EnableChatGptCompatibility).
+        var hostsMcp = SqlOSSingleApplicationSurfaces.HasMcp(application);
+        ClientRegistration.Cimd.Enabled = hostsMcp;
+        ResourceIndicators.Enabled = hostsMcp;
+        if (hostsMcp
+            && string.Equals(DefaultAudience, SqlOSSingleApplicationSurfaces.DefaultAudienceSentinel, StringComparison.Ordinal)
+            && SqlOSSingleApplicationSurfaces.ResolveMcpAudience(application) is { } mcpAudience)
+        {
+            // Portable clients that omit `resource` still receive a token usable at the MCP surface.
+            DefaultAudience = mcpAudience;
+        }
+
         ApplySingleApplicationBranding(application);
         return this;
     }
@@ -316,6 +331,8 @@ public class SqlOSAuthServerOptions
             Origin = section["Origin"],
             ClientId = section["ClientId"],
             Audience = section["Audience"],
+            Api = section["Api"],
+            Mcp = section["Mcp"],
             RedirectPath = section["RedirectPath"] ?? "/auth/callback",
             EnablePasswordSignup = ReadBool(section, "EnablePasswordSignup", true),
             ConfigureAuthPageBranding = ReadBool(section, "ConfigureAuthPageBranding", true),
@@ -529,6 +546,19 @@ public class SqlOSAuthServerOptions
                     .Select(static value => value.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+            });
+        }
+
+        if (application.BrandConfigurations.Count > 0)
+        {
+            // `app.Brand(...)` is SeedAuthPage moved inside the application description; it layers
+            // on top of the defaults above (or an earlier explicit SeedAuthPage call).
+            SeedAuthPage(page =>
+            {
+                foreach (var configure in application.BrandConfigurations)
+                {
+                    configure(page);
+                }
             });
         }
 

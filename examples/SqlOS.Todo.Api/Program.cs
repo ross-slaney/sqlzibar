@@ -320,7 +320,6 @@ app.UseSwaggerUI();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseCors("todo-emcy-frontend");
-app.MapSqlOS();
 
 app.MapGet("/sample/config", async (
     IOptions<TodoSampleOptions> sampleOptions,

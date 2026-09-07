@@ -1024,7 +1024,6 @@ public sealed class AuthServerSigningKeyResilienceIntegrationTests
                 .SetApplicationName("SqlOS.IntegrationTests.SigningKeyCustody");
 
             var app = builder.Build();
-            app.MapSqlOS();
             var protectedApi = app.MapGroup("/replica-api")
                 .RequireSqlOSAccessToken("replica-cache");
             protectedApi.MapGet("/validate", (HttpContext context) => Results.Ok(new

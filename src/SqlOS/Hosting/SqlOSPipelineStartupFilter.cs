@@ -1,19 +1,27 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;
+using SqlOS.AuthServer.Configuration;
+using SqlOS.AuthServer.Endpoints;
+using SqlOS.AuthServer.Extensions;
 using SqlOS.Configuration;
+using SqlOS.Extensions;
 using SqlOS.Fga.Dashboard;
 using RootDashboardMiddleware = SqlOS.Dashboard.SqlOSDashboardMiddleware;
 
 namespace SqlOS.Hosting;
 
 /// <summary>
-/// Registers SqlOS dashboard middleware and auth server endpoints without requiring app code after <see cref="WebApplicationBuilder.Build"/>.
+/// Registers SqlOS dashboard middleware and adds the auth-server, admin, protected-resource-metadata,
+/// and companion-package endpoints to the application's route table without requiring app code
+/// after <see cref="WebApplicationBuilder.Build"/>. Surface token validation lives in
+/// <see cref="SqlOSSurfaceMatcherPolicy"/>.
 /// </summary>
 internal sealed class SqlOSPipelineStartupFilter : IStartupFilter
 {
@@ -78,8 +86,73 @@ internal sealed class SqlOSPipelineStartupFilter : IStartupFilter
             hostOptions.AuthServer.EnableScim);
         app.UseMiddleware<SqlOSFgaDashboardMiddleware>($"{prefix}/admin/fga", environment, hostOptions.Dashboard);
 
+        var mappingState = services.GetService<SqlOSEndpointMappingState>();
+        if (mappingState == null)
+        {
+            // The host did not register SqlOS through AddSqlOS (for example a middleware-only
+            // pipeline in tests); there is no endpoint surface to own.
+            next(app);
+            return;
+        }
+
+        // Map the auth-server/admin routes into a SqlOS-owned data source. It withholds them at
+        // dispatch time when application code also called the obsolete MapSqlOS() or MapAuthServer(),
+        // whether that call runs before or after this filter, so no route is ever registered twice.
+        var application = hostOptions.AuthServer.SingleApplication;
+        var hostExtensions = application?.HostExtensions ?? [];
+        var coreEndpoints = new SqlOSEndpointRouteBuilder(services);
+        mappingState.OwnedMappingInProgress = true;
+        try
+        {
+            WebApplicationExtensions.MapSqlOSCoreEndpoints(coreEndpoints, hostOptions, hostOptions.AuthServer);
+        }
+        finally
+        {
+            mappingState.OwnedMappingInProgress = false;
+        }
+
+        var sharedEndpoints = new SqlOSEndpointRouteBuilder(services);
+        sharedEndpoints.MapSqlOSProtectedResourceMetadata(hostOptions.AuthServer);
+        foreach (var extension in hostExtensions)
+        {
+            extension.MapEndpoints(sharedEndpoints, hostOptions);
+        }
+
+        var sqlosEndpoints = new SqlOSEndpointDataSource(
+            mappingState,
+            coreEndpoints.DataSources.ToArray(),
+            sharedEndpoints.DataSources.ToArray());
+
+        // Let the application configure its pipeline first. WebApplication wraps it in
+        // UseRouting()/UseEndpoints() when the application mapped endpoints of its own and leaves
+        // the route builder it used (the WebApplication itself) in the builder properties.
         next(app);
+
+        if (app.Properties.TryGetValue(EndpointRouteBuilderKey, out var value)
+            && value is IEndpointRouteBuilder applicationRoutes)
+        {
+            // Join the application's route table so SqlOS endpoints are dispatched by the same
+            // routing pass as the application's, behind its middleware (CORS, exception handling,
+            // rate limiting) and with normal route precedence over catch-all fallbacks. The
+            // routing middleware snapshots the data sources when the pipeline is built, which
+            // happens after every startup filter has run. UseEndpoints() only registers the new
+            // sources with the global EndpointDataSource; it ignores ones already present.
+            applicationRoutes.DataSources.Add(sqlosEndpoints);
+            app.UseEndpoints(static _ => { });
+            return;
+        }
+
+        // The application mapped nothing itself, so WebApplication added no routing pass. SqlOS
+        // appends one after the application's middleware; unmatched requests still end in 404.
+        app.UseRouting();
+        app.UseEndpoints(endpoints => endpoints.DataSources.Add(sqlosEndpoints));
     };
+
+    /// <summary>
+    /// The <see cref="IApplicationBuilder.Properties"/> key under which <c>UseRouting()</c> records
+    /// the <see cref="IEndpointRouteBuilder"/> it routes for and <c>UseEndpoints()</c> reads it back.
+    /// </summary>
+    private const string EndpointRouteBuilderKey = "__EndpointRouteBuilder";
 
     private static bool HasNonLoopbackTrustedProxy(ForwardedHeadersOptions options)
         => options.KnownProxies.Any(address => !IPAddress.IsLoopback(address))

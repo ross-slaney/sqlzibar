@@ -27,5 +27,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SqlOS\SqlOS.csproj" />
+    <ProjectReference Include="..\..\src\SqlOS.Mcp\SqlOS.Mcp.csproj" />
   </ItemGroup>
 </Project>

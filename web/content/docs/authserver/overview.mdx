@@ -45,7 +45,6 @@ AuthServer is SqlOS's identity piece. Users, orgs, sessions, OAuth tokens, socia
 builder.AddSqlOS<AppDbContext>();
 
 var app = builder.Build();
-app.MapSqlOS();
 ```
 
 ## Auth flow
@@ -110,4 +109,5 @@ Open `/sqlos/admin/auth/`. Manage orgs, users, memberships, clients, OIDC, SSO, 
 - [Client ID Metadata Documents](/docs/authserver/client-id-metadata-documents)
 - [Dynamic Client Registration](/docs/authserver/dynamic-client-registration)
 - [CLI OAuth](/docs/authserver/cli-oauth)
+- [MCP Server](/docs/authserver/mcp-server)
 - [MCP Resource Indicators and Audience](/docs/authserver/mcp-resource-indicators-and-audience)

@@ -96,15 +96,13 @@ The actual project also configures hosted/headless AuthPage behavior, email and 
 ```csharp
 var app = builder.Build();
 
-app.MapSqlOS();
-
 // Apply application migrations, middleware, and endpoints.
 app.MapExampleEndpoints();
 
 app.Run();
 ```
 
-Together, `AddSqlOS()` and `MapSqlOS()` expose the configured SqlOS dashboard, OAuth authorization endpoints and metadata, social OIDC relying-party callbacks, hosted auth UI, and admin APIs. `AddSqlOS` installs the dashboard middleware; `MapSqlOS` maps the endpoint groups. Application endpoints remain explicit and independently testable.
+`AddSqlOS()` alone exposes the configured SqlOS dashboard, OAuth authorization endpoints and metadata, social OIDC relying-party callbacks, hosted auth UI, and admin APIs: it installs the dashboard middleware and maps the endpoint groups from a startup filter, so no `MapSqlOS()` call is needed. Application endpoints remain explicit and independently testable.
 
 ## What the sample demonstrates
 

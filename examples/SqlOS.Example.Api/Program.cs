@@ -334,7 +334,6 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
-app.MapSqlOS();
 
 using (var scope = app.Services.CreateScope())
 {

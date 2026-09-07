@@ -110,8 +110,6 @@ builder.AddSqlOS<AppXDbContext>(
 
 var app = builder.Build();
 
-app.MapSqlOS();
-
 app.MapGet("/", (HttpContext http) => Results.Content($$"""
     <!doctype html>
     <html lang="en">

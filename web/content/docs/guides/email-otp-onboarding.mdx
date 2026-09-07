@@ -155,7 +155,6 @@ builder.Services.AddCors(cors =>
 
 var app = builder.Build();
 app.UseCors("parcelpilot-auth");
-app.MapSqlOS();
 ```
 
 Do not combine `AllowAnyOrigin` with credentials. A same-origin backend-for-frontend proxy can avoid browser CORS, but it must preserve the SqlOS request cookie and keep the flow tokens out of logs.

@@ -77,7 +77,7 @@ The component that authenticates users, obtains authorization, and issues tokens
 
 ### Bootstrap
 
-SqlOS startup work that creates or upgrades its owned schema, ensures signing keys and settings, reconciles configured seeds, creates FGA functions, and removes selected expired artifacts. `AddSqlOS` registers this as a hosted service, so it is different from `MapSqlOS`, which maps HTTP endpoints. See [Schema ownership](/docs/guides/configuration#schema-ownership) and [Production Readiness](/docs/guides/production-readiness#6-roll-schema-changes-forward-through-one-instance).
+SqlOS startup work that creates or upgrades its owned schema, ensures signing keys and settings, reconciles configured seeds, creates FGA functions, and removes selected expired artifacts. `AddSqlOS` registers this as a hosted service; it is separate from the HTTP endpoint mapping `AddSqlOS` also performs through its startup filter. See [Schema ownership](/docs/guides/configuration#schema-ownership) and [Production Readiness](/docs/guides/production-readiness#6-roll-schema-changes-forward-through-one-instance).
 
 ## C
 

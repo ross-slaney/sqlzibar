@@ -62,7 +62,7 @@ builder.AddSqlOS<AppDbContext>(
 
 Switch the EF callback to `UseNpgsql(connectionString)` to run the same host on PostgreSQL. See [Choose SQL Server or PostgreSQL](/docs/guides/choosing-a-provider).
 
-`UseSingleApplication` creates one first-party PKCE client, a callback at `{Origin}/auth/callback`, a default client allowlist (`openid`, `profile`, `email`, `offline_access`), and matching AuthPage branding. With [OpenID Provider mode](/docs/authserver/openid-provider) enabled (the default), authorization-server metadata advertises `openid`, `profile`, and `email`; `offline_access` stays on the client only for gateway compatibility and is not advertised, because SqlOS issues refresh tokens to code-flow clients without gating them on that scope. Advanced public-client registration and resource indicators remain off until you opt in.
+`UseSingleApplication` creates one first-party PKCE client, a callback at `{Origin}/auth/callback`, a default client allowlist (`openid`, `profile`, `email`, `offline_access`), and matching AuthPage branding. With [OpenID Provider mode](/docs/authserver/openid-provider) enabled (the default), authorization-server metadata advertises `openid`, `profile`, and `email`; `offline_access` stays on the client only for gateway compatibility and is not advertised, because SqlOS issues refresh tokens to code-flow clients without gating them on that scope. Declare `app.Api = "/api"` to protect a REST surface and `app.Mcp("/mcp", ...)` (from `SqlOS.Mcp`) to host an OAuth-protected MCP server; the latter also turns on portable-client registration and resource indicators. Otherwise those advanced features remain off until you opt in.
 
 <Callout type="warning" title="Configuration is explicit">
   `AddSqlOS` does not automatically bind an `SqlOS` configuration section. Read values from `builder.Configuration`, your secret store, or environment variables and assign them in the options callback as shown above.
@@ -90,7 +90,7 @@ Switch the EF callback to `UseNpgsql(connectionString)` to run the same host on 
 
 ## What starts automatically
 
-When the host starts, SqlOS initializes and upgrades its own tables, automatically creates and protects a signing key when none exists, and applies settings and startup seeds. Your EF migrations continue to own your application tables. `app.MapSqlOS()` maps the OAuth, hosted login, and admin API routes; the dashboard middleware is registered by `AddSqlOS`.
+When the host starts, SqlOS initializes and upgrades its own tables, automatically creates and protects a signing key when none exists, and applies settings and startup seeds. Your EF migrations continue to own your application tables. `AddSqlOS` also maps the OAuth, hosted login, and admin API routes and registers the dashboard middleware at startup; there is no separate `MapSqlOS()` call.
 
 Default paths:
 

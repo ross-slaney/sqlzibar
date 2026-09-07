@@ -178,7 +178,7 @@ app.MapPost("/api/social/exchange", async (
 });
 ```
 
-The client must generate an unguessable `state` value and an S256 PKCE verifier/challenge, persist the verifier and state in a server-side or platform-protected transaction, and compare the returned state before exchange. `MapSqlOS()` already maps the provider callback at `/sqlos/auth/oidc/callback`; the application `RedirectUri` above is a separate, registered OAuth client callback.
+The client must generate an unguessable `state` value and an S256 PKCE verifier/challenge, persist the verifier and state in a server-side or platform-protected transaction, and compare the returned state before exchange. SqlOS already maps the provider callback at `/sqlos/auth/oidc/callback`; the application `RedirectUri` above is a separate, registered OAuth client callback.
 
 ### Frontend code (Next.js)
 

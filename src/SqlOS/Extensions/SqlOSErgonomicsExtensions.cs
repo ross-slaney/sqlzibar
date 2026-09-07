@@ -992,6 +992,21 @@ internal static class SqlOSAccessTokenEndpointFilter
             return await next(context);
         }
 
+        // A declared single-application surface (Api/Mcp) already validated this request's token
+        // for the same audience before routing ran. Re-using that result keeps an explicit
+        // RequireSqlOSAccessToken on a group under the surface harmless; scope requirements are
+        // still enforced here because the surface middleware does not know them.
+        if (httpContext.GetSqlOSValidatedToken() is { } alreadyValidated
+            && string.Equals(alreadyValidated.Audience, options.ExpectedAudience, StringComparison.Ordinal))
+        {
+            if (SqlOSScopeRequirementPolicy.DescribeUnsatisfied(options.RequiredScopes, alreadyValidated.Scope) is { } reusedScopeFailure)
+            {
+                return new SqlOSTokenChallengeResult(options, "insufficient_scope", reusedScopeFailure);
+            }
+
+            return await next(context);
+        }
+
         var authService = httpContext.RequestServices.GetRequiredService<SqlOSAuthService>();
         var authorization = httpContext.Request.Headers.Authorization.ToString();
         if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))

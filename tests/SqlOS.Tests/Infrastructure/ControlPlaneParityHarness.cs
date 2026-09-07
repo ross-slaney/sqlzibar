@@ -107,7 +107,6 @@ internal sealed class ControlPlaneParityHarness : IAsyncDisposable
         builder.Services.RemoveAll<IHostedService>();
 
         var app = builder.Build();
-        app.MapSqlOS();
         await app.StartAsync();
         var scope = app.Services.CreateScope();
         return new ControlPlaneParityHarness(app, scope);
