@@ -13,7 +13,7 @@ namespace SqlOS.IntegrationTests;
 [TestClass]
 public sealed class SchemaInitializerIntegrationTests
 {
-    private const int CurrentSchemaVersion = 44;
+    private const int CurrentSchemaVersion = 45;
 
     [TestMethod]
     public async Task EnsureSchema_CreatesCoreTables()
@@ -47,6 +47,7 @@ public sealed class SchemaInitializerIntegrationTests
                      "SqlOSSessions",
                      "SqlOSRefreshTokens",
                      "SqlOSSigningKeys",
+                     "SqlOSAuthPageSessionFamilies",
                      "SqlOSTemporaryTokens",
                      "SqlOSAuditEvents",
                      "SqlOSScimConnections",
@@ -105,6 +106,10 @@ public sealed class SchemaInitializerIntegrationTests
         {
             Assert.IsTrue(await ColumnExistsAsync("SqlOSScopeDisplayNames", column), $"Column SqlOSScopeDisplayNames.{column} should exist.");
         }
+
+        Assert.IsTrue(
+            await ColumnExistsAsync("SqlOSTemporaryTokens", "AuthPageSessionFamilyId"),
+            "AuthPage cookie credentials must link to a revocable session family.");
 
         Assert.IsTrue(
             await IndexExistsAsync(AspireFixture.SharedContext, "SqlOSConsentGrants", "UX_SqlOSConsentGrants_ActiveUserClient"),

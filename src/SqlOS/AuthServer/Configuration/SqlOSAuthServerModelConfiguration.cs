@@ -655,14 +655,42 @@ public static class SqlOSAuthServerModelConfiguration
             entity.Property(x => x.CustodyProvider).HasMaxLength(120);
         });
 
+        modelBuilder.Entity<SqlOSAuthPageSessionFamily>(entity =>
+        {
+            entity.ToTable("SqlOSAuthPageSessionFamilies", schema, t => t.ExcludeFromMigrations());
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.RevokedAt });
+            entity.HasIndex(x => new { x.OrganizationId, x.RevokedAt });
+            entity.Property(x => x.OrganizationId).HasMaxLength(64);
+            entity.Property(x => x.RevocationReason).HasMaxLength(200);
+            // Family revocation is the AuthPage-session lock. A renewal that
+            // loaded an active family must fail closed if logout or lifecycle
+            // revocation commits before the successor cookie is accepted.
+            entity.Property(x => x.RevokedAt).IsConcurrencyToken();
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Organization)
+                .WithMany()
+                .HasForeignKey(x => x.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<SqlOSTemporaryToken>(entity =>
         {
             entity.ToTable("SqlOSTemporaryTokens", schema, t => t.ExcludeFromMigrations());
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => x.AuthPageSessionFamilyId);
             entity.Property(x => x.Purpose).HasMaxLength(80);
+            entity.Property(x => x.AuthPageSessionFamilyId).HasMaxLength(64);
             entity.Property(x => x.ConsumedAt).IsConcurrencyToken();
             entity.Property(x => x.PayloadJson).IsConcurrencyToken();
+            entity.HasOne(x => x.AuthPageSessionFamily)
+                .WithMany(x => x.TemporaryTokens)
+                .HasForeignKey(x => x.AuthPageSessionFamilyId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<SqlOSAuditEvent>(entity =>

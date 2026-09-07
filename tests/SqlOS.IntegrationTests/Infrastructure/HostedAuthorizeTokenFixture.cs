@@ -457,6 +457,45 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
         return JsonDocument.Parse(body);
     }
 
+    public async Task<HttpResponseMessage> LogoutAsync(string authPageCookie)
+    {
+        using var logout = new HttpRequestMessage(HttpMethod.Get, "/sqlos/auth/logout?returnTo=/");
+        logout.Headers.TryAddWithoutValidation("Cookie", authPageCookie);
+        return await Client.SendAsync(logout);
+    }
+
+    public async Task<AuthPagePersistedInspection> InspectAuthPageAsync(params string[] rawCookies)
+    {
+        await using var scope = App.Services.CreateAsyncScope();
+        var crypto = scope.ServiceProvider.GetRequiredService<SqlOSCryptoService>();
+        var db = scope.ServiceProvider.GetRequiredService<TestSqlOSDbContext>();
+        var tokens = new List<SqlOSTemporaryToken?>();
+        foreach (var rawCookie in rawCookies)
+        {
+            var value = rawCookie.StartsWith("sqlos_auth_page=", StringComparison.Ordinal)
+                ? rawCookie["sqlos_auth_page=".Length..]
+                : rawCookie;
+            var hash = crypto.HashToken(value);
+            tokens.Add(await db.Set<SqlOSTemporaryToken>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Purpose == SqlOSAuthLifecyclePolicy.AuthPageSessionPurpose
+                    && x.TokenHash == hash));
+        }
+
+        var familyIds = tokens
+            .Select(token => token?.AuthPageSessionFamilyId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var families = familyIds.Count == 0
+            ? []
+            : await db.Set<SqlOSAuthPageSessionFamily>()
+                .AsNoTracking()
+                .Where(x => familyIds.Contains(x.Id))
+                .ToListAsync();
+        return new AuthPagePersistedInspection(tokens, families);
+    }
+
     public async ValueTask DisposeAsync()
     {
         Client.Dispose();
@@ -539,3 +578,7 @@ public sealed record HostedSessionAuthorize(
 {
     public void Dispose() => Response.Dispose();
 }
+
+public sealed record AuthPagePersistedInspection(
+    IReadOnlyList<SqlOSTemporaryToken?> Tokens,
+    IReadOnlyList<SqlOSAuthPageSessionFamily> Families);

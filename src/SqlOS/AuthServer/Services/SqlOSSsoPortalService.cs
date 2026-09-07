@@ -660,6 +660,13 @@ public sealed class SqlOSSsoPortalService
                     && x.ConsumedAt == null
                     && eligibleUserIds.Contains(x.UserId!))
                 .ToListAsync(cancellationToken);
+        var authPageFamilies = eligibleUserIds.Count == 0
+            ? []
+            : await _context.Set<SqlOSAuthPageSessionFamily>()
+                .Where(x => x.RevokedAt == null
+                    && x.OrganizationId == session.OrganizationId
+                    && eligibleUserIds.Contains(x.UserId))
+                .ToListAsync(cancellationToken);
 
         foreach (var activeSession in sessions)
         {
@@ -675,6 +682,12 @@ public sealed class SqlOSSsoPortalService
         foreach (var authPageSession in authPageSessions)
         {
             authPageSession.ConsumedAt = now;
+        }
+
+        foreach (var authPageFamily in authPageFamilies)
+        {
+            authPageFamily.RevokedAt = now;
+            authPageFamily.RevocationReason = "sso_required";
         }
 
         await _context.SaveChangesAsync(cancellationToken);

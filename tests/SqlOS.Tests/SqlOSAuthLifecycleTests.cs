@@ -536,14 +536,22 @@ public sealed class SqlOSAuthLifecycleTests
                 "LifecycleHarness",
                 "203.0.113.20");
 
-        public Task<string> CreateAuthPageSessionAsync(OrganizationSubject subject)
-            => Crypto.CreateTemporaryTokenAsync(
-                "auth_page_session",
-                subject.User.Id,
-                clientApplicationId: null,
-                organizationId: subject.Organization.Id,
-                payload: new { AuthenticationMethod = "password" },
-                lifetime: TimeSpan.FromMinutes(30));
+        public async Task<string> CreateAuthPageSessionAsync(OrganizationSubject subject)
+        {
+            var http = new DefaultHttpContext();
+            http.Request.Scheme = "https";
+            await AuthPage.SignInAsync(http, subject.User, subject.Organization.Id, "password");
+            return ReadAuthPageCookie(http);
+        }
+
+        private static string ReadAuthPageCookie(HttpContext http)
+        {
+            var pair = http.Response.Headers.SetCookie.ToString().Split(';', 2)[0];
+            const string prefix = "sqlos_auth_page=";
+            return pair.StartsWith(prefix, StringComparison.Ordinal)
+                ? pair[prefix.Length..]
+                : throw new InvalidOperationException($"AuthPage sign-in did not set a cookie: {pair}");
+        }
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();
     }
