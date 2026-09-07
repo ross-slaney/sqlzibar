@@ -11,6 +11,7 @@ builder.AddSqlOS<NotesDbContext>(
         app.Api = "/api";                                       // protected REST surface
         app.Mcp("/mcp", mcp => mcp.WithTools<NotesMcpTools>()); // protected MCP surface (SqlOS.Mcp)
         app.Brand(page => { /* AuthPage colors and copy */ });
+        // app.Headless("/auth/authorize");                     // your own sign-in UI instead of the hosted pages
         app.Authorization(fga => { /* FGA resource types, permissions, roles */ });
     }));
 

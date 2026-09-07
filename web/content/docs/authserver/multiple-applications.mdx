@@ -1,0 +1,80 @@
+---
+title: "Multiple Applications (identity provider)"
+description: "Move from the standard one-app flow to explicit clients when a second application must sign in with your accounts."
+order: 2
+section: authserver
+---
+
+The [standard flow](/docs/authserver/single-application) describes one product in one call. Use this second shape when other applications need to sign in with your accounts: a separate SPA and API, a native or CLI client, a partner integration, or products that offer "Sign in with Acme". The host is the same; the difference is that you declare each client explicitly instead of letting `UseSingleApplication` derive one.
+
+Stay on the standard flow until a second application actually exists. `Api` and `Mcp` surfaces, hosted or headless login, branding, FGA, and the dashboard all work there, and you can graduate later without changing the runtime.
+
+## Declare each client
+
+Drop `UseSingleApplication` and seed clients. The origin and issuer no longer derive from an application, so set them once:
+
+```csharp
+builder.AddSqlOS<AppDbContext>(
+    db => db.UseSqlServer(connectionString),
+    options =>
+    {
+        options.AuthServer.PublicOrigin = "https://id.acme.example.com";
+        options.AuthServer.Issuer = "https://id.acme.example.com/sqlos/auth";
+
+        // Your own browser app: first-party, PKCE, no consent screen.
+        options.AuthServer.SeedClient(client =>
+        {
+            client.ClientId = "acme-web";
+            client.Name = "Acme Web";
+            client.ClientType = "public_pkce";
+            client.RedirectUris = ["https://app.acme.example.com/auth/callback"];
+            client.AllowedScopes = ["openid", "profile", "email", "offline_access"];
+            client.Audience = "https://api.acme.example.com";
+            client.IsFirstParty = true;
+        });
+
+        // A partner product using your accounts: third party, consent screen, named scopes.
+        options.AuthServer.SeedClient(client =>
+        {
+            client.ClientId = "partner-portal";
+            client.Name = "Partner Portal";
+            client.ClientType = "confidential";
+            client.RedirectUris = ["https://portal.partner.example/oauth/callback"];
+            client.AllowedScopes = ["openid", "profile", "email"];
+        });
+
+        options.AuthServer.SeedAuthPage(page => page.PageTitle = "Sign in to Acme");
+        // options.AuthServer.UseHeadlessAuthPage(headless => headless.BuildUiUrl = ...);
+    });
+```
+
+Clients can equally be created from the dashboard (**Auth Server > Clients**) or the admin API. All three control planes share one validation, tenancy, secret handling, and audit path; code-owned records are reconciled at startup and are read-only in the dashboard.
+
+## What changes compared with one application
+
+| Concern | Standard flow | Multiple applications |
+| --- | --- | --- |
+| Client registration | One first-party PKCE client derived from `Origin` | One `SeedClient` (or dashboard/API record) per application |
+| Issuer and origin | Derived from `app.Origin` | `AuthServer.PublicOrigin` and `AuthServer.Issuer`, set once |
+| Audiences | `{Origin}/api` and `{Origin}/mcp` | Per client via `client.Audience`; APIs validate with `RequireSqlOSAccessToken(audience)` or `UseSqlOSAccessTokenValidation` |
+| Consent | Never shown (first party) | Shown for third-party clients; name scopes with `SeedScopeDisplayName` |
+| Hosted vs headless | `app.Brand(...)` / `app.Headless(...)` | `AuthServer.SeedAuthPage(...)` / `AuthServer.UseHeadlessAuthPage(...)` |
+| Authorization model | `app.Authorization(...)` | `options.Fga.Seed(...)` |
+| Portable and machine clients | CIMD + resource indicators on when `Mcp` is declared | Opt in per need: [CIMD](/docs/authserver/client-id-metadata-documents), [DCR](/docs/authserver/dynamic-client-registration), [machine clients](/docs/authserver/machine-clients) |
+
+Everything else — users, organizations, sessions, invitations, sign-in methods, MFA, SCIM, audit — is identical. The auth server, hosted pages, and dashboard are still mapped by `AddSqlOS` at startup.
+
+## Common shapes
+
+- **Separate SPA and API.** Seed the SPA as a public PKCE client with `Audience` set to the API's origin; protect the API with [`RequireSqlOSAccessToken`](/docs/quickstarts/protect-api) for that audience. See [Protect an API](/docs/quickstarts/protect-api).
+- **Sign in with Acme.** Register each relying party as a third-party client, name your scopes for the consent screen, and point the relying party at your discovery document. See [Sign in with X](/docs/guides/sign-in-with-x).
+- **CLIs and terminal apps.** Enable device authorization on a public client. See [Terminal auth](/docs/guides/terminal-auth).
+- **Background jobs and services.** Confidential clients with client credentials, bound to a service account. See [Machine clients](/docs/authserver/machine-clients) and [Service accounts](/docs/guides/service-account-jobs).
+- **Who may use which application.** Control access per organization with [Application Access](/docs/authserver/application-access).
+
+## Related
+
+- [Clients](/docs/authserver/clients): every onboarding path in detail (owned, confidential, CLI, portable, compatibility)
+- [Scopes and permissions](/docs/authserver/scopes-and-permissions)
+- [Hosted vs headless](/docs/authserver/hosted-vs-headless)
+- [Single application (standard flow)](/docs/authserver/single-application)

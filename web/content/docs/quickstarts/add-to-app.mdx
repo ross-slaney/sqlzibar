@@ -11,7 +11,7 @@ section: quickstarts
   href="#complete-program"
   actionLabel="View the code"
 >
-  Install SqlOS 4.2.0, register one SQL Server or PostgreSQL `DbContext`, declare one application, and map the routes. FGA modeling and advanced client registration can wait.
+  Install SqlOS 4.2.0, register one SQL Server or PostgreSQL `DbContext`, and describe one application in one `AddSqlOS` call. This is the standard SqlOS flow; FGA modeling and multi-application client registration can wait.
 </Banner>
 
 ## Goal
@@ -20,7 +20,8 @@ Start an ASP.NET Core application with:
 
 - SqlOS tables in your existing SQL Server or PostgreSQL database;
 - one first-party PKCE application;
-- OAuth metadata and hosted login routes;
+- OAuth metadata and hosted login routes (or your own login UI with one extra line);
+- a token-protected `/api` surface;
 - a password-protected embedded dashboard.
 
 ## Prerequisites
@@ -59,6 +60,7 @@ Replace `Program.cs` with:
 ```csharp
 using Microsoft.EntityFrameworkCore;
 using SqlOS;
+using SqlOS.AuthServer.Extensions;
 using SqlOS.Configuration;
 using SqlOS.Extensions;
 
@@ -73,15 +75,18 @@ var dashboardPassword = builder.Configuration["SqlOS:Dashboard:Password"]
     ?? throw new InvalidOperationException(
         "Configure SqlOS:Dashboard:Password with user secrets or your secret store.");
 builder.AddSqlOS<AppDbContext>(
-    db => db.UseSqlServer(connectionString),
+    db => db.UseSqlServer(connectionString), // or db.UseNpgsql(connectionString)
     options =>
     {
         options.UseSingleApplication("Acme", app =>
         {
-            app.Origin = publicOrigin;
+            app.Origin = publicOrigin;                              // issuer, callback, audiences derive from this
             app.ClientId = "acme-web";
-            app.Audience = $"{publicOrigin}/api";
-            app.RedirectPath = "/auth/callback";
+            app.Api = "/api";                                       // bearer tokens for {Origin}/api required under /api
+            app.Brand(page => page.PrimaryColor = "#0f172a");       // hosted sign-in pages
+            // app.Headless("/auth/authorize");                     // ...or your own sign-in UI instead
+            // app.Mcp("/mcp", mcp => mcp.WithTools<AcmeTools>());  // SqlOS.Mcp package: hosted MCP server
+            // app.Authorization(fga => ...);                       // permission model, when you need row-level rules
         });
 
         options.Dashboard.AuthMode = SqlOSDashboardAuthMode.Password;
@@ -91,6 +96,7 @@ builder.AddSqlOS<AppDbContext>(
 var app = builder.Build();
 
 app.MapGet("/", () => Results.Ok(new { sqlos = "ready" }));
+app.MapGet("/api/me", (HttpContext http) => http.GetSqlOSValidatedToken()!.UserId); // already protected
 
 app.Run();
 
@@ -100,7 +106,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 }
 ```
 
-`SqlOSDbContext<TContext>` registers the AuthServer, calendar, email, and FGA EF models. `UseSingleApplication` creates the application seed and AuthPage branding without exposing client-registration terminology in the common path.
+`SqlOSDbContext<TContext>` registers the AuthServer, calendar, email, and FGA EF models. `UseSingleApplication` creates the application seed, AuthPage branding, and the `/api` token boundary without exposing client-registration terminology in the common path. Every line inside `app => { … }` except `Origin` is optional; the full option table is on [Getting started](/docs/getting-started#every-option-you-need-on-one-screen).
+
+### Hosted or headless
+
+The hosted login, signup, OTP, MFA, and consent pages are the default. If your product must own those screens, uncomment `app.Headless("/auth/authorize")`: SqlOS then redirects browser interaction to your page at `{Origin}/auth/authorize` with the standard `request`, `view`, `email`, `pendingToken`, and `mfaToken` parameters, and your frontend drives the flow with `@sqlos/headless`. Nothing else in this file changes. See [Build your own login UI](/docs/guides/custom-login-ui).
 
 <Callout type="warning" title="SqlOS options are not automatically bound">
   The example explicitly reads the dashboard password from `builder.Configuration` and assigns it to `options.Dashboard.Password`. Merely adding `SqlOS:Dashboard:Password` to configuration does not configure SqlOS unless your callback reads and assigns it.
@@ -136,6 +146,8 @@ Open `http://localhost:5050/sqlos`, enter the configured dashboard password, the
 - the Applications or Clients view contains `acme-web`;
 - the redirect URI is `http://localhost:5050/auth/callback`;
 - the audience is `http://localhost:5050/api`.
+
+Check the protected surface: `curl -i http://localhost:5050/api/me` returns `401` with a `WWW-Authenticate: Bearer` challenge that names `http://localhost:5050/.well-known/oauth-protected-resource`.
 
 ![Configured SqlOS dashboard after startup seeding](/docs/guides-configuration.png)
 
@@ -179,4 +191,5 @@ Single-application mode will not overwrite an unrelated manual client. Pick a di
 - [Protect an API](/docs/quickstarts/protect-api)
 - [Authorize EF Core queries](/docs/quickstarts/ef-authorization)
 - [Invite organization members](/docs/authserver/invitations)
-- [Single-application configuration](/docs/authserver/single-application)
+- [Single application (standard flow)](/docs/authserver/single-application)
+- [Multiple applications](/docs/authserver/multiple-applications) when a second app must sign in with these accounts

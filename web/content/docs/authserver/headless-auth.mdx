@@ -27,6 +27,21 @@ Not sure? Start [hosted](/docs/authserver/hosted-vs-headless). You can switch la
 
 ## Configuration
 
+In the standard one-app flow, headless is one line inside the application description. SqlOS builds the UI URL under `Origin` and forwards the standard parameters (`request`, `view`, `error`, `email`, `displayName`, `pendingToken`, `mfaToken`, `consentToken`, `ui_context`):
+
+```csharp
+builder.AddSqlOS<AppDbContext>(options =>
+{
+    options.UseSingleApplication("Acme", app =>
+    {
+        app.Origin = "https://app.example.com";
+        app.Headless("/authorize");   // your UI at https://app.example.com/authorize
+    });
+});
+```
+
+When your UI lives on a different origin, or you want to shape the query yourself, set `BuildUiUrl` directly (`app.Headless(headless => ...)` in single-application mode, `options.AuthServer.UseHeadlessAuthPage` on a multi-application host):
+
 ```csharp
 builder.AddSqlOS<AppDbContext>(options =>
 {

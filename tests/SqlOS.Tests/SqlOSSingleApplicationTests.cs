@@ -256,6 +256,75 @@ public sealed class SqlOSSingleApplicationTests
     }
 
     [TestMethod]
+    public void SingleApplication_HeadlessPath_BuildsUiUrlUnderOriginWithStandardParameters()
+    {
+        var options = new SqlOSOptions();
+        options.AuthServer.UseSingleApplication("Todo", app =>
+        {
+            app.Origin = "https://todo.example.com/";
+            app.Headless("/auth/authorize");
+        });
+
+        var buildUiUrl = options.AuthServer.Headless.BuildUiUrl;
+        buildUiUrl.Should().NotBeNull("app.Headless switches the auth server into headless mode");
+
+        var url = buildUiUrl!(new SqlOSHeadlessUiRouteContext(
+            new Microsoft.AspNetCore.Http.DefaultHttpContext(),
+            RequestId: "req_1",
+            View: "login",
+            Error: null,
+            PendingToken: "pt_1",
+            Email: "ada@example.com",
+            DisplayName: null,
+            UiContext: null,
+            MfaToken: "mfa_1",
+            ConsentToken: "ct_1"));
+
+        var uri = new Uri(url);
+        uri.GetLeftPart(UriPartial.Path).Should().Be("https://todo.example.com/auth/authorize");
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        query["request"].ToString().Should().Be("req_1");
+        query["view"].ToString().Should().Be("login");
+        query["email"].ToString().Should().Be("ada@example.com");
+        query["pendingToken"].ToString().Should().Be("pt_1");
+        query["mfaToken"].ToString().Should().Be("mfa_1");
+        query["consentToken"].ToString().Should().Be("ct_1");
+        query.Should().NotContainKey("error", "null values are omitted");
+        query.Should().NotContainKey("displayName");
+    }
+
+    [TestMethod]
+    public void SingleApplication_HeadlessPath_RequiresOriginAndAbsolutePath()
+    {
+        var withoutOrigin = () => new SqlOSAuthServerOptions()
+            .UseSingleApplication("Todo", app => app.Headless("/auth/authorize"));
+        withoutOrigin.Should().Throw<InvalidOperationException>().WithMessage("*app.Origin*");
+
+        var relativePath = () => new SqlOSSingleApplicationOptions { Origin = "https://todo.example.com" }
+            .Headless("auth/authorize");
+        relativePath.Should().Throw<ArgumentException>().WithMessage("*start with '/'*");
+    }
+
+    [TestMethod]
+    public void SingleApplication_HeadlessConfigure_ForwardsToUseHeadlessAuthPage()
+    {
+        var options = new SqlOSAuthServerOptions();
+        options.UseSingleApplication("Todo", app =>
+        {
+            app.Origin = "https://todo.example.com";
+            app.Headless(headless =>
+            {
+                headless.HeadlessApiBasePath = "/auth-api";
+                headless.BuildUiUrl = _ => "https://ui.example.com/login";
+            });
+        });
+
+        options.Headless.HeadlessApiBasePath.Should().Be("/auth-api");
+        options.Headless.BuildUiUrl.Should().NotBeNull();
+        options.AuthPageSeed!.PageTitle.Should().Be("Sign in to Todo", "branding defaults still apply for the headless view model");
+    }
+
+    [TestMethod]
     public void SingleApplication_ConfigurationBinding_ReadsApiAndMcp()
     {
         var configuration = new ConfigurationBuilder()

@@ -34,6 +34,10 @@ builder.AddSqlOS<NotesDbContext>(
                 page.AccentColor = "#16a34a";
             });
 
+            // To draw the sign-in screens yourself instead of using the hosted pages, add one line and
+            // serve your UI at {Origin}/auth/authorize (see docs/guides/custom-login-ui):
+            // app.Headless("/auth/authorize");
+
             app.Authorization(fga =>
             {
                 fga.ResourceType(NotesAuthorization.NotebookType, "Notebook", "One notebook per user.");

@@ -58,6 +58,62 @@ public sealed class SqlOSSingleApplicationOptions
 
     internal List<Action<SqlOSFgaSeedBuilder>> AuthorizationConfigurations { get; } = [];
 
+    internal List<Action<SqlOSHeadlessAuthOptions>> HeadlessConfigurations { get; } = [];
+
+    /// <summary>
+    /// Uses your own sign-in UI instead of the hosted SqlOS pages (headless mode). SqlOS redirects
+    /// browser interaction from <c>/sqlos/auth/authorize</c> to <c>{Origin}{uiPath}</c> and forwards
+    /// the standard headless parameters (<c>request</c>, <c>view</c>, <c>error</c>, <c>email</c>,
+    /// <c>displayName</c>, <c>pendingToken</c>, <c>mfaToken</c>, <c>consentToken</c>,
+    /// <c>ui_context</c>), which the <c>@sqlos/headless</c> package reads. Equivalent to
+    /// <see cref="SqlOSAuthServerOptions.UseHeadlessAuthPage"/> with a generated <c>BuildUiUrl</c>.
+    /// </summary>
+    /// <param name="uiPath">The absolute path of your sign-in UI under <see cref="Origin"/>, for example <c>/auth/authorize</c>.</param>
+    /// <param name="configure">Optional further headless configuration (API base path, signup hook).</param>
+    public SqlOSSingleApplicationOptions Headless(string uiPath, Action<SqlOSHeadlessAuthOptions>? configure = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(uiPath);
+        var normalizedPath = uiPath.Trim();
+        if (!normalizedPath.StartsWith('/'))
+        {
+            throw new ArgumentException("The headless UI path must be absolute and start with '/'.", nameof(uiPath));
+        }
+
+        HeadlessConfigurations.Add(headless =>
+        {
+            var origin = (Origin ?? throw new InvalidOperationException(
+                "app.Headless(uiPath) requires app.Origin so SqlOS can build the UI URL.")).TrimEnd('/');
+            headless.BuildUiUrl = context => Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(
+                origin + normalizedPath,
+                new Dictionary<string, string?>
+                {
+                    ["request"] = context.RequestId,
+                    ["view"] = context.View,
+                    ["error"] = context.Error,
+                    ["email"] = context.Email,
+                    ["displayName"] = context.DisplayName,
+                    ["pendingToken"] = context.PendingToken,
+                    ["mfaToken"] = context.MfaToken,
+                    ["consentToken"] = context.ConsentToken,
+                    ["ui_context"] = context.UiContext?.ToJsonString()
+                });
+            configure?.Invoke(headless);
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Uses your own sign-in UI instead of the hosted SqlOS pages with full control over the
+    /// redirect. Equivalent to <see cref="SqlOSAuthServerOptions.UseHeadlessAuthPage"/>; set
+    /// <see cref="SqlOSHeadlessAuthOptions.BuildUiUrl"/> in <paramref name="configure"/>.
+    /// </summary>
+    public SqlOSSingleApplicationOptions Headless(Action<SqlOSHeadlessAuthOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        HeadlessConfigurations.Add(configure);
+        return this;
+    }
+
     /// <summary>
     /// Brands the hosted sign-in page for this application. Equivalent to
     /// <see cref="SqlOSAuthServerOptions.SeedAuthPage"/>, applied on top of the single-application

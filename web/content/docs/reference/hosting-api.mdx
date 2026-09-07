@@ -139,7 +139,7 @@ public SqlOSOptions UseSingleApplication(
 | Parameter | Type | Description |
 | --- | --- | --- |
 | `name` | `string` | Product/application display name. A client ID is derived from it unless explicitly configured. |
-| `configure` | `Action<SqlOSSingleApplicationOptions>?` | Describes the application: origin, `Api`/`Mcp` surfaces, branding, authorization model, and client overrides. |
+| `configure` | `Action<SqlOSSingleApplicationOptions>?` | Describes the application: origin, `Api`/`Mcp` surfaces, hosted branding or headless UI, authorization model, and client overrides. |
 | `configuration` | `IConfiguration` | Configuration containing the single-application section. |
 | `sectionName` | `string` | Section path. Defaults to `SqlOS:Application`. |
 
@@ -158,6 +158,8 @@ Single-application mode creates one first-party public PKCE client and applies A
 | `Api` | `string?` | Absolute path prefix of the protected REST surface, for example `/api`. SqlOS validates bearer tokens for the audience `{Origin}{Api}` on every request under it and serves the RFC 9728 document at `/.well-known/oauth-protected-resource`. |
 | `Mcp` | `string?` | Absolute path prefix of the protected MCP surface, for example `/mcp`. SqlOS validates tokens for `{Origin}{Mcp}` under it, serves `/.well-known/oauth-protected-resource{Mcp}`, and enables client ID metadata documents plus resource indicators. Set it through `app.Mcp(path, configure)` from the `SqlOS.Mcp` package to also host the server. |
 | `Brand(Action<SqlOSAuthPageSeedOptions>)` | method | Forwards to `AuthServer.SeedAuthPage` on top of the single-application defaults. |
+| `Headless(string uiPath, Action<SqlOSHeadlessAuthOptions>? configure = null)` | method | Uses your own sign-in UI at `{Origin}{uiPath}` instead of the hosted pages. Forwards to `AuthServer.UseHeadlessAuthPage` with a generated `BuildUiUrl` that passes `request`, `view`, `error`, `email`, `displayName`, `pendingToken`, `mfaToken`, `consentToken`, and `ui_context`. Requires `Origin`; `uiPath` must start with `/`. |
+| `Headless(Action<SqlOSHeadlessAuthOptions>)` | method | Forwards to `AuthServer.UseHeadlessAuthPage` unchanged; set `BuildUiUrl` yourself. |
 | `Authorization(Action<SqlOSFgaSeedBuilder>)` | method | Forwards to `Fga.Seed`. |
 | `Audience`, `ClientId`, `RedirectUri`, `AllowedScopes`, `Credentials` | | Client overrides. `Audience` defaults to `{Origin}{Api}` when `Api` is set. |
 

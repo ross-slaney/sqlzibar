@@ -314,6 +314,13 @@ public class SqlOSAuthServerOptions
         }
 
         ApplySingleApplicationBranding(application);
+
+        foreach (var configure in application.HeadlessConfigurations)
+        {
+            // `app.Headless(...)` is UseHeadlessAuthPage moved inside the application description.
+            UseHeadlessAuthPage(configure);
+        }
+
         return this;
     }
 
