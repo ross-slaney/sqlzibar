@@ -16,7 +16,7 @@ namespace SqlOS.Todo.E2eTests;
 /// device-approve journey. Success screenshots land in TestResults for the PR.
 /// </summary>
 [TestClass]
-public sealed class TodoPostgresE2eTests
+public sealed class TodoE2eTests
 {
     // Deliberately different from the demo's 5080/5090.
     private const int ApiPort = 5180;

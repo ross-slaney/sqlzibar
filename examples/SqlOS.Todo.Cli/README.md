@@ -170,10 +170,10 @@ dotnet test examples/SqlOS.Todo.IntegrationTests/SqlOS.Todo.IntegrationTests.csp
 
 The suite covers the Todo API's hosted/headless auth, audience/resource validation, FGA, CIMD, and DCR behavior over HTTP. It does not launch the CLI executable.
 
-The CLI binary itself is covered by the Playwright suite in [`examples/SqlOS.Todo.E2eTests`](../SqlOS.Todo.E2eTests/TodoPostgresE2eTests.cs), which CI runs as the `Todo PostgreSQL E2E` job:
+The CLI binary itself is covered by the Playwright suite in [`examples/SqlOS.Todo.E2eTests`](../SqlOS.Todo.E2eTests/TodoE2eTests.cs), which CI runs as the `Todo Web + CLI E2E (PostgreSQL)` job:
 
 ```bash
-./scripts/todo-postgres-e2e.sh
+./scripts/todo-e2e.sh
 ```
 
 It boots the Todo app host on PostgreSQL, runs the built `SqlOS.Todo.Cli.dll` as a child process with `SQLOS_TODO_API_ORIGIN`, `SQLOS_TODO_CLI_NO_BROWSER=1`, and a temporary `SQLOS_TODO_CLI_HOME`, reads the verification URL from stdout, creates an account and approves (or denies) the request in Chromium, and then asserts that `login` exits with tokens, `whoami`/`add`/`list` work with them, `logout` removes them, and a denied login exits non-zero without writing tokens. Your real `~/.sqlos/todo-cli` is never touched.

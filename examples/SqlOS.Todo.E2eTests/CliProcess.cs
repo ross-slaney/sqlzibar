@@ -61,7 +61,7 @@ internal sealed class CliProcess : IAsyncDisposable
         }
 
         // Same environment contract documented in examples/SqlOS.Todo.Cli/README.md.
-        startInfo.Environment["SQLOS_TODO_API_ORIGIN"] = TodoPostgresE2eTests.ApiOrigin;
+        startInfo.Environment["SQLOS_TODO_API_ORIGIN"] = TodoE2eTests.ApiOrigin;
         startInfo.Environment["SQLOS_TODO_CLI_HOME"] = tokenHome;
         startInfo.Environment["SQLOS_TODO_CLI_NO_BROWSER"] = "1";
 
