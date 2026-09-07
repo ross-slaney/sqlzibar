@@ -334,12 +334,13 @@ public sealed class SchemaInitializerIntegrationTests
     [TestMethod]
     public async Task BootstrapCleanup_ComparesUtcNowAgainstTimestampColumns()
     {
+        await using var context = await AspireFixture.CreateIsolatedAuthContextAsync("PgTimestamp");
         var crypto = new SqlOSCryptoService(
-            AspireFixture.SharedContext,
+            context,
             Options.Create(AspireFixture.Options),
             AspireFixture.DataProtectionProvider);
         var admin = new SqlOSAdminService(
-            AspireFixture.SharedContext,
+            context,
             Options.Create(AspireFixture.Options),
             crypto);
 
