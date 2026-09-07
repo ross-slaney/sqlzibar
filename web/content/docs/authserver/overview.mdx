@@ -17,11 +17,11 @@ section: authserver
 AuthServer is SqlOS's identity piece. Users, orgs, sessions, OAuth tokens, social OIDC, and SAML run inside your app. Data lives in your database. For applications, SqlOS is both an OAuth authorization server and an [OpenID Connect Provider](/docs/authserver/openid-provider): it mints access and refresh tokens, and it issues ID tokens, OIDC discovery, and UserInfo to downstream relying parties. Toward Google, Microsoft, Apple, and custom social login it plays the opposite role — SqlOS is the OIDC relying party of those upstream providers.
 
 <Callout type="info" title="Recommended reading order">
-  1. [Dashboard](/docs/authserver/dashboard-overview) → [Organizations](/docs/authserver/organizations) → [Hosted vs headless](/docs/authserver/hosted-vs-headless)
-  2. [Password login](/docs/authserver/password-login), [Email OTP](/docs/authserver/email-otp), [Magic Link](/docs/authserver/magic-link), or [Phone OTP](/docs/authserver/phone-otp) → [OIDC](/docs/authserver/oidc-auth) / [SAML](/docs/authserver/saml-sso) / [SCIM](/docs/authserver/scim-directory-sync)
-  3. Security policy: [MFA and TOTP](/docs/authserver/mfa-totp) and [Security Settings](/docs/authserver/security-settings)
-  4. One app: [Single-Application Setup](/docs/authserver/single-application)
-  5. Advanced: [Clients](/docs/authserver/clients), [OpenID Provider](/docs/authserver/openid-provider), [Machine Clients](/docs/authserver/machine-clients), [Application Access](/docs/authserver/application-access), [CIMD](/docs/authserver/client-id-metadata-documents), [DCR](/docs/authserver/dynamic-client-registration) -- only when you need them
+  1. The standard flow: [Single application](/docs/authserver/single-application) — one `AddSqlOS` call with `Origin`, `Api`, `Mcp`, `Brand` or `Headless`, and `Authorization`
+  2. [Dashboard](/docs/authserver/dashboard-overview) → [Organizations](/docs/authserver/organizations) → [Hosted vs headless](/docs/authserver/hosted-vs-headless)
+  3. [Password login](/docs/authserver/password-login), [Email OTP](/docs/authserver/email-otp), [Magic Link](/docs/authserver/magic-link), or [Phone OTP](/docs/authserver/phone-otp) → [OIDC](/docs/authserver/oidc-auth) / [SAML](/docs/authserver/saml-sso) / [SCIM](/docs/authserver/scim-directory-sync)
+  4. Security policy: [MFA and TOTP](/docs/authserver/mfa-totp) and [Security Settings](/docs/authserver/security-settings)
+  5. Many apps: [Multiple applications](/docs/authserver/multiple-applications), then [Clients](/docs/authserver/clients), [OpenID Provider](/docs/authserver/openid-provider), [Machine Clients](/docs/authserver/machine-clients), [Application Access](/docs/authserver/application-access), [CIMD](/docs/authserver/client-id-metadata-documents), [DCR](/docs/authserver/dynamic-client-registration) -- only when you need them
 </Callout>
 
 ## What you get
@@ -42,11 +42,14 @@ AuthServer is SqlOS's identity piece. Users, orgs, sessions, OAuth tokens, socia
 ## Setup
 
 ```csharp
-builder.AddSqlOS<AppDbContext>();
+builder.AddSqlOS<AppDbContext>(
+    db => db.UseSqlServer(connectionString),
+    options => options.UseSingleApplication("Acme", app => app.Origin = "https://acme.example.com"));
 
 var app = builder.Build();
-app.MapSqlOS();
 ```
+
+That is the whole registration for one application; the auth server, hosted pages, and dashboard are mapped at startup. Add `Api`, `Mcp`, `Brand` or `Headless`, and `Authorization` inside the same call as the product needs them ([Single application](/docs/authserver/single-application)). Hosts that serve several applications seed clients explicitly instead ([Multiple applications](/docs/authserver/multiple-applications)).
 
 ## Auth flow
 
@@ -110,4 +113,5 @@ Open `/sqlos/admin/auth/`. Manage orgs, users, memberships, clients, OIDC, SSO, 
 - [Client ID Metadata Documents](/docs/authserver/client-id-metadata-documents)
 - [Dynamic Client Registration](/docs/authserver/dynamic-client-registration)
 - [CLI OAuth](/docs/authserver/cli-oauth)
+- [MCP Server](/docs/authserver/mcp-server)
 - [MCP Resource Indicators and Audience](/docs/authserver/mcp-resource-indicators-and-audience)

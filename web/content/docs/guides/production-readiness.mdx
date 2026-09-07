@@ -89,7 +89,6 @@ builder.AddSqlOS<AppDbContext>(options =>
 });
 
 var app = builder.Build();
-app.MapSqlOS();
 ```
 
 Use your platform's known proxy or network configuration instead of copying an “accept all proxies” snippet. Trusting arbitrary `X-Forwarded-*` headers lets a caller influence host, scheme, client IP, and any policy built on them.

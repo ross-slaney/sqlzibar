@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -37,8 +38,12 @@ public static class ServiceCollectionExtensions
         SqlOSPathDefaults.Apply(options);
         options.AuthServer.Dashboard = options.Dashboard;
         options.Fga.Dashboard = options.Dashboard;
+        SqlOSSingleApplicationSurfaces.ApplyHostConfiguration(options);
         SqlOSOptionsValidator.ValidateOrThrow(options);
 
+        services.AddRouting();
+        services.AddSingleton<SqlOSEndpointMappingState>();
+        services.AddSingleton<MatcherPolicy, SqlOSSurfaceMatcherPolicy>();
         services.AddSingleton(Options.Create(options));
         services.AddSingleton(Options.Create(options.AuthServer));
         services.AddSingleton(Options.Create(options.Fga));
@@ -147,6 +152,11 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<SqlOSCalendarSyncHostedService>();
         services.AddHostedService<SqlOSBootstrapHostedService>();
         services.AddSingleton<IStartupFilter, SqlOSPipelineStartupFilter>();
+
+        foreach (var extension in options.AuthServer.SingleApplication?.HostExtensions ?? [])
+        {
+            extension.ConfigureServices(services, options);
+        }
 
         return services;
     }

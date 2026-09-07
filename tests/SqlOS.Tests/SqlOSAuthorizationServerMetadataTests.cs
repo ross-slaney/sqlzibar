@@ -50,6 +50,54 @@ public sealed class SqlOSAuthorizationServerMetadataTests
     }
 
     [TestMethod]
+    public async Task GetMetadataAsync_SingleApplicationWithMcpSurface_AdvertisesCimdAndResourceButNotRegistration()
+    {
+        using var context = CreateContext();
+        var optionsValue = new SqlOSAuthServerOptions
+        {
+            PublicOrigin = "https://app.example.com",
+            Issuer = "https://app.example.com/sqlos/auth"
+        };
+        optionsValue.UseSingleApplication("App", app =>
+        {
+            app.Origin = "https://app.example.com";
+            app.Mcp = "/mcp";
+        });
+
+        var service = await CreateAuthorizationServerServiceAsync(context, optionsValue);
+
+        var json = JsonSerializer.Serialize(await service.GetMetadataAsync(new DefaultHttpContext()));
+
+        json.Should().Contain("\"client_id_metadata_document_supported\":true");
+        json.Should().Contain("\"resource_parameter_supported\":true");
+        json.Should().NotContain("registration_endpoint");
+    }
+
+    [TestMethod]
+    public async Task GetMetadataAsync_SingleApplicationWithoutMcpSurface_OmitsCimdAndResource()
+    {
+        using var context = CreateContext();
+        var optionsValue = new SqlOSAuthServerOptions
+        {
+            PublicOrigin = "https://app.example.com",
+            Issuer = "https://app.example.com/sqlos/auth"
+        };
+        optionsValue.UseSingleApplication("App", app =>
+        {
+            app.Origin = "https://app.example.com";
+            app.Api = "/api";
+        });
+
+        var service = await CreateAuthorizationServerServiceAsync(context, optionsValue);
+
+        var json = JsonSerializer.Serialize(await service.GetMetadataAsync(new DefaultHttpContext()));
+
+        json.Should().NotContain("client_id_metadata_document_supported");
+        json.Should().NotContain("resource_parameter_supported");
+        json.Should().NotContain("registration_endpoint");
+    }
+
+    [TestMethod]
     public async Task GetMetadataAsync_IncludesCapabilityFlags_WhenEnabled()
     {
         using var context = CreateContext();

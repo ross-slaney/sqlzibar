@@ -1,0 +1,97 @@
+---
+title: "MCP Server"
+description: "Host an OAuth-protected Model Context Protocol server from the single-application description with SqlOS.Mcp."
+order: 26
+section: authserver
+---
+
+`SqlOS.Mcp` hosts a [Model Context Protocol](https://modelcontextprotocol.io) server on the MCP surface you declare inside `UseSingleApplication`. SqlOS owns the OAuth side (audience validation, protected-resource metadata, client onboarding for portable clients such as Codex, ChatGPT, Claude, and Cursor); the package registers the official MCP SDK server and maps it on the protected path. Application code contains no `AddMcpServer`, `MapMcp`, `RequireSqlOSAccessToken`, or hand-written metadata document.
+
+## Install
+
+```bash
+dotnet add package SqlOS
+dotnet add package SqlOS.Mcp
+```
+
+`SqlOS.Mcp` ships on the same version line as `SqlOS` and references `ModelContextProtocol.AspNetCore`. The core `SqlOS` package has no dependency on the MCP SDK.
+
+## Declare the surface
+
+```csharp
+using SqlOS.Mcp;
+
+builder.AddSqlOS<AppDbContext>(
+    db => db.UseSqlServer(connectionString),
+    options => options.UseSingleApplication("PetalPal", app =>
+    {
+        app.Origin = "https://petalpal.example.com";
+        app.Api = "/api";
+        app.Mcp("/mcp", mcp => mcp.WithTools<GardenMcpTools>());
+    }));
+
+var app = builder.Build();
+app.Run();
+```
+
+`app.Mcp(path, configure)` sets `Mcp = path` and registers a host extension. From that one line SqlOS:
+
+| Concern | Behavior |
+| --- | --- |
+| Audience | Every request under `/mcp` must carry a bearer token whose `aud` is exactly `{Origin}/mcp`. A token minted for `/api` is rejected, and vice versa. |
+| Challenge | Unauthenticated or wrong-audience requests receive `401` with `WWW-Authenticate: Bearer realm="PetalPal MCP", resource_metadata="{Origin}/.well-known/oauth-protected-resource/mcp"`. |
+| Discovery | `GET /.well-known/oauth-protected-resource/mcp` returns the RFC 9728 document with `resource`, `authorization_servers`, `scopes_supported`, and `bearer_methods_supported`. |
+| Client onboarding | Client ID metadata documents and resource indicators are enabled, so portable MCP clients register with an HTTPS metadata URL and request `resource={Origin}/mcp`. Dynamic client registration stays off unless you enable it. |
+| Server | `AddMcpServer().WithHttpTransport(stateless)` is registered, your `configure` callback runs against the SDK `IMcpServerBuilder` unchanged, and the server is mapped on `/mcp` during startup. |
+| Audit | Each tool call records one SqlOS audit event: `mcp.tool.called` with the tool name, subject, organization, client, MCP session, and outcome. Tool arguments, results, and tokens are never written. |
+
+Portable clients that register a portless loopback redirect (for example `http://127.0.0.1/callback/<id>`) and bind an ephemeral port at sign-in are accepted per RFC 8252 §7.3, as described in [OAuth for MCP clients](/docs/guides/mcp-oauth).
+
+## Write tools
+
+Tools are ordinary MCP SDK tools. Inject `ISqlOSMcpUserContext` to act as the connecting user; it is resolved from the token SqlOS already validated and never exposes the raw token.
+
+```csharp
+using System.ComponentModel;
+using ModelContextProtocol.Server;
+using SqlOS.Fga.Interfaces;
+using SqlOS.Mcp;
+
+public sealed class GardenMcpTools
+{
+    [McpServerTool(Name = "list_gardens"), Description("Lists the gardens the connecting user can read.")]
+    public static async Task<IReadOnlyList<GardenSummary>> ListGardens(
+        ISqlOSMcpUserContext user,
+        GardenService gardens,
+        CancellationToken ct)
+    {
+        var userId = user.UserId ?? throw new InvalidOperationException("A user token is required.");
+        return await gardens.ListReadableAsync(userId, ct);
+    }
+}
+```
+
+`ISqlOSMcpUserContext` exposes `IsAuthenticated`, `UserId`, `OrganizationId`, `ClientId`, `SessionId`, `Audience`, `Scopes`, `HasScope(...)`, and the `ClaimsPrincipal`. Resolve the acting identity from it, never from tool arguments, and apply FGA or application policy per tool: audience validation proves the token was minted for this MCP server, not that the user may read a given garden.
+
+## Combine with an API surface
+
+`Api` and `Mcp` are separate audiences under the same origin. The first-party browser client receives `{Origin}/api` tokens by default; MCP clients request `{Origin}/mcp` through the `resource` parameter. Both surfaces share the auth server, sessions, users, organizations, and FGA model, and both are served by the same host with the application's middleware (CORS, exception handling) in front.
+
+Surface paths are validated at startup: absolute, non-root, distinct and non-nested, and outside `/.well-known`, the auth base path, and `DashboardBasePath`.
+
+## Verify
+
+```bash
+curl -i https://petalpal.example.com/.well-known/oauth-protected-resource/mcp
+curl -i -X POST https://petalpal.example.com/mcp -H 'content-type: application/json' -d '{}'
+```
+
+The first request returns the metadata document; the second returns `401` with the Bearer challenge above. After a client completes authorization with `resource=https://petalpal.example.com/mcp`, `tools/list` and `tools/call` succeed and each call appears under Audit Logs in the dashboard.
+
+## Next steps
+
+- [OAuth for MCP clients](/docs/guides/mcp-oauth) for the explicit multi-deployment setup and the full protocol walk-through
+- [Single-Application Setup](/docs/authserver/single-application)
+- [Client ID Metadata Documents](/docs/authserver/client-id-metadata-documents)
+- [MCP Resource Indicators and Audience](/docs/authserver/mcp-resource-indicators-and-audience)
+- [Audit Logs](/docs/guides/audit-logs)

@@ -6,11 +6,11 @@ order: 0
 
 <Banner
   eyebrow="Start here"
-  title="Get one useful SqlOS result before exploring the platform"
-  href="/docs/quickstarts/run-todo"
-  actionLabel="Run the sample"
+  title="One application, described in one call"
+  href="#the-standard-flow-one-app-one-call"
+  actionLabel="See the call"
 >
-  Start with a working Todo app or embed one hosted auth server with `UseSingleApplication`. Then complete a native ASP.NET Core login before adding API and row authorization.
+  SqlOS has two shapes. The standard one — one application, one `AddSqlOS` call — is what almost every product needs and where you should start. Being an identity provider for many applications comes after, on the same host.
 </Banner>
 
 <Callout type="info" title="Supported stack">
@@ -20,39 +20,26 @@ order: 0
   - **SQL Server or PostgreSQL**
 </Callout>
 
-## Pick your first result
+## The standard flow: one app, one call
 
-<CardGrid cols={2}>
-  <Card title="I want to see it work" description="Run the Todo sample with SQL Server or PostgreSQL, hosted login, and FGA already wired." href="/docs/quickstarts/run-todo" />
-  <Card title="I want it in my app" description="Install the package and declare one application with UseSingleApplication." href="/docs/quickstarts/add-to-app" />
-  <Card title="I need a .NET login" description="Use ASP.NET Core OAuth, PKCE, a secure cookie, and revoking logout." href="/docs/quickstarts/aspnet-core-login" />
-  <Card title="I want working source" description="Compare the runnable .NET, browser, mobile, and CLI examples." href="/docs/examples" />
-</CardGrid>
-
-Running the sample is the fastest evaluation. Adding SqlOS to your application is the canonical integration path. Do not begin with SAML, headless auth, FGA modeling, CIMD, or DCR unless one of those is already a product requirement.
-
-## The canonical one-app shape
-
-For a typical .NET B2B SaaS product, start with:
-
-- one ASP.NET Core host;
-- one EF Core `DbContext` backed by SQL Server or PostgreSQL;
-- one first-party public PKCE application;
-- the hosted SqlOS login page;
-- the embedded dashboard;
-- no FGA-protected domain entities yet.
-
-The core registration is intentionally small:
+For a typical .NET B2B SaaS product you have one ASP.NET Core host, one EF Core `DbContext` on SQL Server or PostgreSQL, and one product that users sign in to. `builder.AddSqlOS<TContext>(…)` describes that product once and SqlOS derives every protocol consequence — routes, token validation, metadata documents, client registration, seeds. `Program.cs` contains no `MapSqlOS`, `RequireSqlOSAccessToken`, `AddMcpServer`, or `MapMcp` calls.
 
 ```csharp
 builder.AddSqlOS<AppDbContext>(
-    db => db.UseSqlServer(connectionString),
+    db => db.UseSqlServer(connectionString),                   // or db.UseNpgsql(connectionString)
     options =>
     {
         options.UseSingleApplication("Acme", app =>
         {
-            app.Origin = publicOrigin;
-            app.Audience = $"{publicOrigin}/api";
+            app.Origin = publicOrigin;                            // everything else derives from this
+            app.Api = "/api";                                     // bearer tokens for {Origin}/api required under /api
+            app.Mcp("/mcp", mcp => mcp.WithTools<AcmeTools>());   // SqlOS.Mcp: hosted, OAuth-protected MCP server
+            app.Brand(page => page.PrimaryColor = "#0f172a");     // hosted sign-in colors, logo, copy
+            // app.Headless("/auth/authorize");                   // ...or your own sign-in UI instead of the hosted pages
+            app.Authorization(fga => fga                          // your permission model, reconciled at startup
+                .ResourceType("project", "Project")
+                .Permission("PROJECT_READ", "Read projects", "project")
+                .Role("project_viewer", "Viewer").Can("PROJECT_READ"));
         });
 
         options.Dashboard.AuthMode = SqlOSDashboardAuthMode.Password;
@@ -60,13 +47,57 @@ builder.AddSqlOS<AppDbContext>(
     });
 ```
 
-Switch the EF callback to `UseNpgsql(connectionString)` to run the same host on PostgreSQL. See [Choose SQL Server or PostgreSQL](/docs/guides/choosing-a-provider).
+Every line is optional except `Origin`. Start with `Origin` alone and add lines as the product needs them; nothing else changes.
 
-`UseSingleApplication` creates one first-party PKCE client, a callback at `{Origin}/auth/callback`, a default client allowlist (`openid`, `profile`, `email`, `offline_access`), and matching AuthPage branding. With [OpenID Provider mode](/docs/authserver/openid-provider) enabled (the default), authorization-server metadata advertises `openid`, `profile`, and `email`; `offline_access` stays on the client only for gateway compatibility and is not advertised, because SqlOS issues refresh tokens to code-flow clients without gating them on that scope. Advanced public-client registration and resource indicators remain off until you opt in.
+### Every option you need, on one screen
+
+| Option | Default | What SqlOS does with it |
+| --- | --- | --- |
+| `app.Origin` | required | Public origin of your app. Issuer (`{Origin}/sqlos/auth`), redirect URI (`{Origin}/auth/callback`), and audiences derive from it. |
+| `app.Api = "/api"` | off | Requires a bearer token for the audience `{Origin}/api` on every request under `/api` (`401` + `WWW-Authenticate` otherwise) and serves `/.well-known/oauth-protected-resource`. Handlers read the user with `http.GetSqlOSValidatedToken()`. [Protect an API](/docs/quickstarts/protect-api) |
+| `app.Mcp("/mcp", mcp => …)` | off | Hosts an MCP server at `/mcp` with the same token protection, a distinct audience, its own protected-resource document, and portable-client registration (CIMD + resource indicators) turned on. Needs the `SqlOS.Mcp` package; the lambda is the MCP SDK's `IMcpServerBuilder`. [MCP server](/docs/authserver/mcp-server) |
+| `app.Brand(page => …)` | `Sign in to {Name}` | Brands the hosted login, signup, OTP, MFA, and consent pages. Same options as `AuthServer.SeedAuthPage`. [Branding](/docs/guides/auth-branding) |
+| `app.Headless("/auth/authorize")` | hosted pages | Switches to **your** sign-in UI: SqlOS redirects browser interaction to `{Origin}/auth/authorize` with the standard `request`, `view`, `email`, `pendingToken`, `mfaToken`, … parameters that `@sqlos/headless` reads. Same as `AuthServer.UseHeadlessAuthPage`. [Custom login UI](/docs/guides/custom-login-ui) |
+| `app.Authorization(fga => …)` | none | Declares resource types, permissions, and roles; reconciled idempotently at startup. Same as `Fga.Seed`. [Model your FGA](/docs/guides/model-fga) |
+| `app.AllowedScopes`, `ClientId`, `RedirectPath`, `EnablePasswordSignup`, `EnabledCredentialTypes` | sensible | Fine-tuning of the single first-party PKCE client SqlOS seeds for you. [All defaults](/docs/authserver/single-application#defaults) |
+| `options.Dashboard.AuthMode` / `Password` | development-only | Who may open `/sqlos`. Set `Password` (from secrets) before anyone else can reach the host. |
+
+Sign-in methods — passwords, email OTP, magic links, social login, SAML, MFA — are `options.AuthServer` seeds or dashboard settings, not code changes. Turn them on when you need them: [Password](/docs/authserver/password-login) · [Email OTP](/docs/authserver/email-otp) · [Social OIDC](/docs/guides/social-oidc) · [SAML](/docs/guides/saml-sso) · [MFA](/docs/authserver/mfa-totp).
+
+### Hosted or headless: one line
+
+The hosted pages are the default and need nothing. When your product wants to own every screen, keep the same call and add one line:
+
+```csharp
+app.Headless("/auth/authorize");   // your page at {Origin}/auth/authorize drives login, signup, OTP, MFA, consent
+```
+
+Your frontend then talks to a typed state machine (`npm install @sqlos/headless`) while SqlOS still owns OAuth, PKCE, sessions, and tokens. `app.Brand(...)` still applies; the headless view model exposes it. For full control over the redirect use `app.Headless(headless => headless.BuildUiUrl = …)`. There is no separate dashboard toggle: `BuildUiUrl` present means headless. [Build your own login UI](/docs/guides/custom-login-ui) · [Hosted vs headless](/docs/authserver/hosted-vs-headless)
 
 <Callout type="warning" title="Configuration is explicit">
-  `AddSqlOS` does not automatically bind an `SqlOS` configuration section. Read values from `builder.Configuration`, your secret store, or environment variables and assign them in the options callback as shown above.
+  `AddSqlOS` does not automatically bind an `SqlOS` configuration section. Read values from `builder.Configuration`, your secret store, or environment variables and assign them in the options callback as shown above. (`options.UseSingleApplication(builder.Configuration)` binds just the application description from `SqlOS:Application`.)
 </Callout>
+
+`UseSingleApplication` creates one first-party PKCE client, a callback at `{Origin}/auth/callback`, a default client allowlist (`openid`, `profile`, `email`, `offline_access`), and matching AuthPage branding. With [OpenID Provider mode](/docs/authserver/openid-provider) enabled (the default), authorization-server metadata advertises `openid`, `profile`, and `email`; `offline_access` stays on the client only for gateway compatibility and is not advertised, because SqlOS issues refresh tokens to code-flow clients without gating them on that scope. DCR stays off; CIMD and resource indicators turn on only when you declare `Mcp`.
+
+Switch the EF callback to `UseNpgsql(connectionString)` to run the same host on PostgreSQL. See [Choose SQL Server or PostgreSQL](/docs/guides/choosing-a-provider).
+
+## Pick your first result
+
+<CardGrid cols={2}>
+  <Card title="I want it in my app" description="Install the package and declare one application with UseSingleApplication." href="/docs/quickstarts/add-to-app" />
+  <Card title="I want to see it work" description="Run the Todo sample with SQL Server or PostgreSQL, hosted login, and FGA already wired." href="/docs/quickstarts/run-todo" />
+  <Card title="I need a .NET login" description="Use ASP.NET Core OAuth, PKCE, a secure cookie, and revoking logout." href="/docs/quickstarts/aspnet-core-login" />
+  <Card title="I want working source" description="Compare the runnable .NET, browser, mobile, and CLI examples." href="/docs/examples" />
+</CardGrid>
+
+Adding SqlOS to your application is the canonical integration path; running the sample is the fastest evaluation. Do not begin with SAML, FGA modeling, CIMD, or DCR unless one of those is already a product requirement.
+
+## Second shape: many applications (identity provider)
+
+When other applications should sign in with your accounts — a separate SPA and API, partner apps, CLIs, or "Sign in with Acme" — the same host becomes an identity provider. Drop `UseSingleApplication` and declare each client explicitly with `options.AuthServer.SeedClient(...)` (or create them from the dashboard or admin API; all three share one validation and audit path). Everything from the standard flow still applies; you additionally get per-client consent, audiences, portable-client registration, and machine clients.
+
+→ [Multiple applications](/docs/authserver/multiple-applications) · [Sign in with X](/docs/guides/sign-in-with-x) · [Clients](/docs/authserver/clients)
 
 ## Add capabilities in this order
 
@@ -78,19 +109,22 @@ Switch the EF callback to `UseNpgsql(connectionString)` to run the same host on 
     Let the framework own PKCE, correlation state, the callback, and your application cookie with [Sign in an ASP.NET Core app](/docs/quickstarts/aspnet-core-login).
   </Step>
   <Step title="Protect application endpoints">
-    Validate bearer tokens for one exact audience with [Protect an API](/docs/quickstarts/protect-api).
+    Declare `app.Api = "/api"` and read the validated token in handlers with [Protect an API](/docs/quickstarts/protect-api).
   </Step>
   <Step title="Authorize application data">
-    When role checks stop being enough, use [EF Core authorization](/docs/quickstarts/ef-authorization).
+    When role checks stop being enough, declare `app.Authorization(...)` and filter rows in SQL with [EF Core authorization](/docs/quickstarts/ef-authorization).
   </Step>
   <Step title="Add production features as needed">
-    Continue into invitations, social login, SAML SSO, MFA, audit logs, or calendar integration.
+    Continue into invitations, social login, SAML SSO, MFA, audit logs, an [MCP server](/docs/authserver/mcp-server), or a [custom login UI](/docs/guides/custom-login-ui).
+  </Step>
+  <Step title="Become an identity provider only if you need to">
+    Move to explicit clients when a second application must sign in with your accounts: [Multiple applications](/docs/authserver/multiple-applications).
   </Step>
 </Steps>
 
 ## What starts automatically
 
-When the host starts, SqlOS initializes and upgrades its own tables, automatically creates and protects a signing key when none exists, and applies settings and startup seeds. Your EF migrations continue to own your application tables. `app.MapSqlOS()` maps the OAuth, hosted login, and admin API routes; the dashboard middleware is registered by `AddSqlOS`.
+When the host starts, SqlOS initializes and upgrades its own tables, automatically creates and protects a signing key when none exists, and applies settings and startup seeds. Your EF migrations continue to own your application tables. `AddSqlOS` also maps the OAuth, hosted login, and admin API routes and registers the dashboard middleware at startup; there is no separate `MapSqlOS()` call.
 
 Default paths:
 

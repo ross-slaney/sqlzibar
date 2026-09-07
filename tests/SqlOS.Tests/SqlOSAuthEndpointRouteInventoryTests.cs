@@ -97,7 +97,6 @@ public class SqlOSAuthEndpointRouteInventoryTests
         builder.Services.RemoveAll<IHostedService>();
 
         var app = builder.Build();
-        app.MapSqlOS();
         await app.StartAsync();
         return app;
     }

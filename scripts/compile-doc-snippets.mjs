@@ -10,8 +10,8 @@ const snippetSpecs = [
   {
     name: "README first-run program",
     relativePath: "README.md",
-    heading: "## Add SqlOS to your app",
-    marker: "builder.AddSqlOS<AppDbContext>",
+    heading: "### Add it to a project",
+    marker: "var builder = WebApplication.CreateBuilder(args);",
     wrap: asCompleteProgram,
   },
   ...[

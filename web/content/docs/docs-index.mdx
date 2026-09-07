@@ -8,23 +8,47 @@ order: 0
   These docs target **SqlOS 4.2.0**, **.NET 9**, **EF Core 9**, and **SQL Server or PostgreSQL**. Use the same package version as the docs; older releases do not include the complete current schema and source/reference contract.
 </Callout>
 
-## Get useful proof first
+## The standard flow: one app, one call
+
+Almost every SqlOS host is one product. Describe it once and SqlOS derives the routes, token validation, metadata documents, client registration, and seeds:
+
+```csharp
+builder.AddSqlOS<AppDbContext>(
+    db => db.UseSqlServer(connectionString),
+    options => options.UseSingleApplication("Acme", app =>
+    {
+        app.Origin = "https://acme.example.com";
+        app.Api = "/api";                                     // protected REST surface
+        app.Mcp("/mcp", mcp => mcp.WithTools<AcmeTools>());   // protected MCP server (SqlOS.Mcp)
+        app.Brand(page => page.PrimaryColor = "#0f172a");     // hosted sign-in, or app.Headless("/auth/authorize") for your own UI
+        app.Authorization(fga => /* resource types, permissions, roles */ fga);
+    }));
+```
 
 <CardGrid cols={2}>
-  <Card title="Run the Todo sample" description="See hosted login and authorized EF Core queries without changing an app." href="/docs/quickstarts/run-todo" />
-  <Card title="Add SqlOS to one app" description="Embed one hosted auth server with UseSingleApplication." href="/docs/quickstarts/add-to-app" />
+  <Card title="Getting started: every option on one screen" description="Origin, Api, Mcp, Brand, Headless, Authorization, Dashboard — what each line does and its default." href="/docs/getting-started" />
+  <Card title="Add SqlOS to one app" description="Install the package, paste one Program.cs, run it." href="/docs/quickstarts/add-to-app" />
   <Card title="Sign in from ASP.NET Core" description="Use the built-in OpenID Connect handler, PKCE, and a secure application cookie." href="/docs/quickstarts/aspnet-core-login" />
-  <Card title="Browse runnable examples" description="Choose a .NET, browser, mobile, or CLI reference application." href="/docs/examples" />
-  <Card title="Protect an API" description="Validate a SqlOS bearer token for an exact audience." href="/docs/quickstarts/protect-api" />
-  <Card title="Authorize EF queries" description="Filter rows in SQL with the current FGA APIs." href="/docs/quickstarts/ef-authorization" />
+  <Card title="Protect an API" description="Declare app.Api and read the validated token in handlers." href="/docs/quickstarts/protect-api" />
+  <Card title="Authorize EF queries" description="Declare app.Authorization and filter rows in SQL." href="/docs/quickstarts/ef-authorization" />
+  <Card title="Run the Todo sample" description="See hosted login and authorized EF Core queries without changing an app." href="/docs/quickstarts/run-todo" />
 </CardGrid>
 
-SqlOS has a broad platform surface, but you do not need to adopt it all. The normal path is incremental:
+The normal path is incremental:
 
-1. Run the sample or embed one application.
+1. Declare one application with `Origin`; hosted login and the dashboard work immediately.
 2. Complete hosted login into your ASP.NET Core session.
-3. Protect your application API.
-4. Add fine-grained authorization only to data that needs it.
-5. Add social login, SAML SSO, MFA, audit, calendar, or advanced clients as requirements appear.
+3. Add `Api` to protect your application API.
+4. Add `Authorization` only to data that needs fine-grained rules.
+5. Add `Brand` or `Headless`, an `Mcp` server, social login, SAML SSO, MFA, and audit as requirements appear.
 
-For a short map of the documentation, continue to [Getting Started](/docs/getting-started).
+## Second shape: many applications
+
+When other applications should sign in with your accounts — a separate SPA and API, partner apps, CLIs, "Sign in with Acme" — the same host becomes an identity provider with explicit clients. Start there only when a second application exists.
+
+<CardGrid cols={2}>
+  <Card title="Multiple applications" description="Move from UseSingleApplication to explicit clients, consent, audiences, and machine clients." href="/docs/authserver/multiple-applications" />
+  <Card title="Sign in with X" description="Let other products use your accounts as their identity provider." href="/docs/guides/sign-in-with-x" />
+</CardGrid>
+
+For the full map of the documentation, continue to [Getting Started](/docs/getting-started) or browse the [runnable examples](/docs/examples).

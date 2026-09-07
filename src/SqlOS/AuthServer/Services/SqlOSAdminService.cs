@@ -3218,9 +3218,7 @@ public sealed partial class SqlOSAdminService
         {
             ClientId = clientId,
             Name = name,
-            Audience = string.IsNullOrWhiteSpace(application.Audience)
-                ? clientId
-                : application.Audience.Trim(),
+            Audience = SqlOSSingleApplicationSurfaces.ResolveClientAudience(application, clientId),
             RedirectUris = redirectUris,
             AllowedScopes = allowedScopes,
             ClientType = "public_pkce",

@@ -11,7 +11,7 @@ section: reference
   href="/docs/reference/hosting-api"
   actionLabel="Hosting API"
 >
-  `AddSqlOS` installs the dashboard middleware and `MapSqlOS` maps the protocol, authentication, audit, email, and optional calendar endpoints. This page separates interoperable protocol routes from UI handlers and trusted operator surfaces.
+  `AddSqlOS` installs the dashboard middleware and maps the protocol, authentication, audit, email, and optional calendar endpoints at startup (`MapSqlOS()` is obsolete and no longer required). This page separates interoperable protocol routes from UI handlers and trusted operator surfaces.
 </Banner>
 
 ## Choose the right surface
@@ -28,7 +28,7 @@ SqlOS exposes several HTTP surfaces from the same package, but they are not inte
 
 ## Base paths
 
-With the normal `builder.AddSqlOS<TContext>(...)` and `app.MapSqlOS()` setup, `DashboardBasePath` is the effective root. `AddSqlOS` derives the auth base as `{DashboardBasePath}/auth` after running the configuration callback. Setting `AuthServer.BasePath` independently inside that callback is therefore not an independent route-prefix override.
+With the normal `builder.AddSqlOS<TContext>(...)` setup, `DashboardBasePath` is the effective root. `AddSqlOS` derives the auth base as `{DashboardBasePath}/auth` after running the configuration callback. Setting `AuthServer.BasePath` independently inside that callback is therefore not an independent route-prefix override.
 
 | Surface | Default base path | Configuration |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ With the normal `builder.AddSqlOS<TContext>(...)` and `app.MapSqlOS()` setup, `D
 
 `AuthServer.Issuer` must be an absolute URI whose path matches the derived auth base. When `PublicOrigin` is configured, the issuer must be `{PublicOrigin}{BasePath}`.
 
-The unified dashboard shell and the FGA component API/assets are middleware installed by `AddSqlOS`. FGA page routes are served by the unified shell; the FGA middleware does not expose a second dashboard document. `MapSqlOS` maps AuthServer, audit, email, and—when enabled—calendar endpoints. This distinction matters if you compose the ASP.NET Core pipeline manually.
+The unified dashboard shell and the FGA component API/assets are middleware installed by `AddSqlOS`. FGA page routes are served by the unified shell; the FGA middleware does not expose a second dashboard document. The SqlOS startup filter maps AuthServer, audit, email, and—when enabled—calendar endpoints into the application's route table. This distinction matters if you compose the ASP.NET Core pipeline manually.
 
 ## OAuth discovery and keys
 
@@ -423,7 +423,7 @@ The portal API can configure only the session's organization and SAML connection
 
 ## Calendar callback
 
-`SqlOSOptions.Calendar.Enabled` defaults to `true`. While enabled, `MapSqlOS` adds:
+`SqlOSOptions.Calendar.Enabled` defaults to `true`. While enabled, SqlOS adds:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
@@ -435,7 +435,7 @@ The callback consumes the one-time state and redirects to the exact `ReturnUri` 
 
 ## Dashboard and operator APIs
 
-SqlOS also exposes APIs used by the embedded auth, FGA, audit, email, SSO-setup, and optional calendar dashboards. Endpoint groups are mapped by `MapSqlOS`; the unified shell and FGA component API/assets are middleware installed by `AddSqlOS`. These surfaces:
+SqlOS also exposes APIs used by the embedded auth, FGA, audit, email, SSO-setup, and optional calendar dashboards. Endpoint groups are mapped by the SqlOS startup filter; the unified shell and FGA component API/assets are middleware installed by `AddSqlOS`. These surfaces:
 
 - are excluded from ApiExplorer/OpenAPI descriptions;
 - are protected by the dashboard authorization/session rules, except delegated SSO setup routes that use their own one-time setup token and organization-scoped portal cookie;
@@ -448,7 +448,7 @@ Use path-specific network/edge rules in production. Restrict the exact dashboard
 
 ## Example-application routes are not package APIs
 
-Routes such as the following are defined under `examples/` and are not mounted by `MapSqlOS`:
+Routes such as the following are defined under `examples/` and are not mounted by SqlOS:
 
 - `/api/v1/auth/*`
 - `/api/todos`

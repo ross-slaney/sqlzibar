@@ -31,7 +31,7 @@ The package now emits and packs `SqlOS.xml` for IDE help and generated-reference
 
 | Reference | Use it for |
 | --- | --- |
-| [Hosting API](/docs/reference/hosting-api) | `SqlOSDbContext<TContext>`, `AddSqlOS`, `UseSingleApplication`, `MapSqlOS`, and token-protected route groups |
+| [Hosting API](/docs/reference/hosting-api) | `SqlOSDbContext<TContext>`, `AddSqlOS`, `UseSingleApplication` (`Api`, `Mcp`, `Brand`, `Authorization`), and token-protected route groups |
 | [.NET SDK map](/docs/reference/sdk-reference) | DI services, contracts, namespaces, and task-oriented examples |
 | [AuthServer API](/docs/reference/authserver-api) | Exact authentication, invitation, token, MFA, OIDC, and administrative service methods |
 | [FGA API](/docs/reference/fga-api) | Access checks, EF query filters, resource synchronization, grants, and cursor pagination |
@@ -49,7 +49,7 @@ Phone-code authentication is part of the current AuthServer service surface. Con
 
 Choose the highest-level API that fits the application:
 
-1. **One application:** derive from `SqlOSDbContext<TContext>`, call the combined `builder.AddSqlOS<TContext>(...)` overload, configure `UseSingleApplication(...)`, then call `app.MapSqlOS()`.
+1. **One application:** derive from `SqlOSDbContext<TContext>`, call the combined `builder.AddSqlOS<TContext>(...)` overload, and describe the application with `UseSingleApplication(...)`. SqlOS maps its endpoints and protects the declared `Api`/`Mcp` surfaces at startup.
 2. **Application services:** inject `SqlOSAuthService`, `ISqlOSFgaAuthService`, `ISqlOSAuditLogService`, `ISqlOSTransactionalEmailService`, or `SqlOSCalendarService` for backend workflows.
 3. **Advanced host control:** use explicit client seeds, headless auth, device clients, CIMD/DCR, application assignments, or the lower-level EF/service registration APIs only when the simpler layer cannot express the topology.
 

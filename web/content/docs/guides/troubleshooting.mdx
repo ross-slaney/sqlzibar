@@ -28,7 +28,7 @@ You'll learn how to diagnose connection, OAuth callback, SAML, and migration pro
 
 **Symptom:** EF or raw SQL errors referencing `SqlOS_*` tables.
 
-- Ensure the host has started with `AddSqlOS<TContext>(...)` registered. Schema bootstrap runs from the SqlOS hosted service during startup; `MapSqlOS()` maps HTTP routes but does not create the schema.
+- Ensure the host has started with `AddSqlOS<TContext>(...)` registered. Schema bootstrap runs from the SqlOS hosted service during startup; the HTTP routes SqlOS maps at startup do not create the schema.
 - If your migrations run first, call `SqlOSBootstrapper.InitializeAsync()` before migrating (see [Configuration](/docs/guides/configuration#schema-ownership)).
 
 ## OAuth redirect / callback mismatch

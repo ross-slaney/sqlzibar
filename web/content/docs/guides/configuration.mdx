@@ -20,7 +20,7 @@ You'll learn the recommended SqlOS host setup first, followed by optional FGA, t
 
 1. **Host registration** — `builder.AddSqlOS<AppDbContext>(db => db.UseSqlServer(...), options => ...)`
 2. **EF model** — derive from `SqlOSDbContext<AppDbContext>` and put app entities in `OnApplicationModelCreating`
-3. **Routes** — `app.MapSqlOS()` after `Build()`
+3. **Routes** — mapped automatically at startup; declare protected `Api`/`Mcp` surfaces inside `UseSingleApplication`
 
 Only add `ISqlOSResourceEntity`, FGA seeds, and grants when you are ready to authorize application data.
 
