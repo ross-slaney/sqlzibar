@@ -332,6 +332,24 @@ public sealed class SchemaInitializerIntegrationTests
     }
 
     [TestMethod]
+    public async Task BootstrapCleanup_ComparesUtcNowAgainstTimestampColumns()
+    {
+        var crypto = new SqlOSCryptoService(
+            AspireFixture.SharedContext,
+            Options.Create(AspireFixture.Options),
+            AspireFixture.DataProtectionProvider);
+        var admin = new SqlOSAdminService(
+            AspireFixture.SharedContext,
+            Options.Create(AspireFixture.Options),
+            crypto);
+
+        await admin.CleanupExpiredTemporaryTokensAsync();
+        await admin.CleanupExpiredEmailOtpChallengesAsync();
+        await admin.CleanupExpiredPhoneOtpChallengesAsync();
+        await admin.CleanupExpiredRefreshTokensAsync();
+    }
+
+    [TestMethod]
     public async Task EmailSchemaInitializer_CreatesTemplatesAndDeliveries()
     {
         var initializer = new SqlOSSchemaInitializer(

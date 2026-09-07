@@ -64,6 +64,7 @@ public static class TodoApiFixture
                 builder.UseSetting("SqlOS:Issuer", "https://todo.example.test/sqlos/auth");
                 builder.UseSetting("TodoSample:PublicOrigin", "https://todo.example.test");
                 builder.UseSetting("TodoSample:Resource", "https://todo.example.test/api/todos");
+                builder.UseSetting("SqlOS:DatabaseProvider", "SqlServer");
                 configureBuilder?.Invoke(builder);
             });
 

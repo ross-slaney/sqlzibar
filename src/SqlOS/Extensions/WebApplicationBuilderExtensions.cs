@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SqlOS.AuthServer.Interfaces;
 using SqlOS.Configuration;
+using SqlOS.Database;
 using SqlOS.Fga.Interfaces;
 
 namespace SqlOS.Extensions;
@@ -55,6 +56,7 @@ public static class WebApplicationBuilderExtensions
         Action<SqlOSOptions>? configureSqlOS = null)
         where TContext : DbContext, ISqlOSAuthServerDbContext, ISqlOSFgaDbContext
     {
+        SqlOSDatabase.EnablePostgreSqlTimestampCompatibility();
         builder.Services.AddDbContext<TContext>(configureDbContext);
         builder.Services.AddSqlOS<TContext>(configureSqlOS);
         return builder;

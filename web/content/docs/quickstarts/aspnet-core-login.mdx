@@ -116,7 +116,7 @@ builder.Services
   `example-aspnet` is registered in SqlOS as `public_pkce` with `token_endpoint_auth_method` `none`. The OpenID Connect handler, unlike ASP.NET Core's generic OAuth handler, does not demand a placeholder secret: the code exchange is bound by the PKCE verifier. Do not add a `ClientSecret` to browser-facing or distributed applications.
 </Callout>
 
-The handler resolves the authorization, token, JWKS, and UserInfo endpoints from `{Authority}/.well-known/openid-configuration`. The sample requests `openid`, `profile`, `email`, and `offline_access`. The seeded client fixes the audience to `http://localhost:5080/api/todos` and allows the exact callback `http://localhost:5090/signin-sqlos`.
+The handler resolves the authorization, token, JWKS, and UserInfo endpoints from `{Authority}/.well-known/openid-configuration`. The sample requests `openid`, `profile`, `email`, `offline_access`, `todos.read`, and `todos.write`. The seeded client fixes the audience to `http://localhost:5080/api/todos` and allows the callback from `TodoSample:AspNetRedirectUri` (default `http://localhost:5090/signin-sqlos`).
 
 ## Start the challenge
 

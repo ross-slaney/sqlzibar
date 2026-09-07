@@ -140,7 +140,8 @@ var todoApi = builder.AddProject<Projects.SqlOS_Todo_Api>("todo-api")
     .WithEnvironment("TodoSample__PublicOrigin", todoOrigin)
     .WithEnvironment("TodoSample__Resource", todoResource)
     .WithEnvironment("TodoSample__EnableHeadless", "false")
-    .WithEnvironment("TodoSample__EnableDcr", todoEnableDcr);
+    .WithEnvironment("TodoSample__EnableDcr", todoEnableDcr)
+    .WithEnvironment("SqlOS__DatabaseProvider", "SqlServer");
 
 builder.AddProject<Projects.SqlOS_Example_AspNetCoreWeb>("aspnet-web")
     .WithEnvironment("SqlOS__Origin", todoOrigin)

@@ -94,13 +94,13 @@ builder.Services.AddCors(options =>
 builder.AddSqlOS<TodoSampleDbContext>(
     db =>
     {
-        if (string.Equals(builder.Configuration["SqlOS:DatabaseProvider"], "PostgreSql", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(builder.Configuration["SqlOS:DatabaseProvider"], "SqlServer", StringComparison.OrdinalIgnoreCase))
         {
-            db.UseNpgsql(connectionString);
+            db.UseSqlServer(connectionString);
             return;
         }
 
-        db.UseSqlServer(connectionString);
+        db.UseNpgsql(connectionString);
     },
     options =>
     {
@@ -216,7 +216,7 @@ builder.AddSqlOS<TodoSampleDbContext>(
             client.Name = "Example ASP.NET Core Client";
             client.Description = "Razor Pages public PKCE client with a server-owned application session.";
             client.Audience = sampleConfig.Resource;
-            client.RedirectUris = ["http://localhost:5090/signin-sqlos"];
+            client.RedirectUris = [sampleConfig.AspNetRedirectUri];
             client.AllowedScopes = sampleConfig.AllowedScopes;
             client.ClientType = "public_pkce";
             client.RequirePkce = true;

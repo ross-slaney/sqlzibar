@@ -158,7 +158,7 @@ const requiredSourceContracts = [
   ],
   [
     "examples/SqlOS.Todo.Api/Program.cs",
-    /ClientId = "example-aspnet"[\s\S]*http:\/\/localhost:5090\/signin-sqlos/,
+    /ClientId = "example-aspnet"[\s\S]*sampleConfig.AspNetRedirectUri/,
     "Todo ASP.NET Core public client registration",
   ],
   [

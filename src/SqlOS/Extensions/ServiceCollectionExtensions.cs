@@ -18,6 +18,7 @@ using SqlOS.Email.Services;
 using SqlOS.Fga.Configuration;
 using SqlOS.Fga.Interfaces;
 using SqlOS.Fga.Services;
+using SqlOS.Database;
 using SqlOS.Hosting;
 using SqlOS.Services;
 using SqlOS.Security;
@@ -31,6 +32,10 @@ public static class ServiceCollectionExtensions
         Action<SqlOSOptions>? configure = null)
         where TContext : DbContext, ISqlOSAuthServerDbContext, ISqlOSFgaDbContext
     {
+        // Npgsql caches DateTime mappings on first use. Hosts that call UseNpgsql must
+        // enable legacy timestamp behavior before any connection or query is compiled.
+        SqlOSDatabase.EnablePostgreSqlTimestampCompatibility();
+
         var options = new SqlOSOptions();
         configure?.Invoke(options);
 

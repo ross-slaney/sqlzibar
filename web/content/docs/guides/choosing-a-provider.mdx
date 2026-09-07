@@ -43,10 +43,13 @@ MySQL and SQLite are not supported.
 
 ## Todo sample
 
-The Todo AppHost still defaults to SQL Server. Set `SqlOS:DatabaseProvider=PostgreSql` to start Postgres instead; the API then calls `UseNpgsql` for the same connection string.
+The Todo AppHost defaults to PostgreSQL and `UseNpgsql`. Set `SqlOS:DatabaseProvider=SqlServer` to start SQL Server instead.
 
 ```bash
-dotnet run --project examples/SqlOS.Todo.AppHost -- --SqlOS:DatabaseProvider=PostgreSql
+dotnet run --project examples/SqlOS.Todo.AppHost
+dotnet run --project examples/SqlOS.Todo.AppHost -- --SqlOS:DatabaseProvider=SqlServer
 ```
+
+Playwright coverage for the Postgres path lives in `examples/SqlOS.Todo.E2eTests` and `scripts/todo-postgres-e2e.sh`.
 
 See [Run the Todo sample](/docs/quickstarts/run-todo).

@@ -28,7 +28,7 @@ From the repository root, start the Todo AppHost:
 dotnet run --project examples/SqlOS.Todo.AppHost/SqlOS.Todo.AppHost.csproj
 ```
 
-The AppHost starts SQL Server, the Todo API/SqlOS host, and this Razor Pages client. Wait for its resources to become healthy, then open `http://localhost:5090` and select **Sign in with SqlOS**.
+The AppHost starts PostgreSQL (or SQL Server), the Todo API/SqlOS host, and this Razor Pages client. Wait for its resources to become healthy, then open `http://localhost:5090` and select **Sign in with SqlOS**.
 
 The terminal also prints an authenticated Aspire dashboard link. Its configured listener is `https://localhost:18890`; use the printed URL because it can include a local dashboard token.
 
