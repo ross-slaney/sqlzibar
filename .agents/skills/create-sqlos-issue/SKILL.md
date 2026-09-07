@@ -14,8 +14,9 @@ Use this skill to convert a rough desired state into a SqlOS issue that is ready
 - Check for duplicates or adjacent issues and link them.
 - Separate what already exists from what is missing.
 - Assign all defensible issue metadata: priority in title/body, labels, milestone when clearly mapped, assignee only when the repo convention or user explicitly indicates one.
+- When filing (not drafting), always add the issue to the **sqlos Roadmap** project and assign **Business Value**, **Job Size**, and **Release**. Release is **No Release** unless the caller explicitly named a current board release.
 - Do not invent implementation facts. If evidence is absent, say "I did not find..." and list the search terms or areas checked.
-- If the user asked to file the issue, create it with `gh issue create` after the research. If they asked for a draft, do not file it.
+- If the user asked to file the issue, create it with `gh issue create` after the research, then score it on the roadmap. If they asked for a draft, do not file it and do not add a project item.
 
 ## Fast Context Pass
 
@@ -34,6 +35,7 @@ git status --short --branch
 gh issue list --repo ross-slaney/sqlos --state all --limit 35 --json number,title,state,labels,body,url
 gh label list --repo ross-slaney/sqlos --limit 100 --json name,description
 gh api repos/ross-slaney/sqlos/milestones
+bash .agents/skills/create-sqlos-issue/scripts/add-sqlos-issue-to-roadmap.sh --check-fields
 rg -n "<important terms>" src tests docs web/content examples README.md
 ```
 
@@ -96,6 +98,27 @@ Priority convention:
 - Put `P1`, `P2`, `P3`, or combined `P1/P2` in the title when the recent issue family uses it.
 - Explain the priority in the body. Tie it to security risk, roadmap dependency, or product polish.
 
+Roadmap project fields (required when filing):
+
+- Always add the new issue to [sqlos Roadmap](https://github.com/users/ross-slaney/projects/1) (`gh project` number `1`, owner `ross-slaney`).
+- Always assign **Business Value** (`BV 1`–`BV 4`) and **Job Size** (`Size 1`–`Size 4`). Caller overrides win. Otherwise score them and explain the score in the handoff.
+- Always assign **Release**. Default is **No Release**. Use a named release only when the skill invocation explicitly provided a current board option, for example `release: 4.1.0 Security hardening`.
+- Do not invent Release names, BV values, or Size values. Read current options from `--check-fields` or the gather script.
+- Status and Track are optional. Set Status to `Backlog` when filing unless the caller asked for another current status. Set Track only when the issue clearly maps to one current Track option.
+
+Scoring guidance:
+
+- **BV 4**: live security hole, blocking product capability, or core activation/auth path.
+- **BV 3**: important enterprise-readiness or platform capability, not a live incident.
+- **BV 2**: contributor tooling, polish, or incremental developer experience.
+- **BV 1**: nice-to-have, cosmetic, or very low leverage.
+- **Size 1**: docs, config, or skill-only work on one surface.
+- **Size 2**: focused change across one or two surfaces.
+- **Size 3**: multiple surfaces or moderate product work.
+- **Size 4**: cross-cutting work across control planes or a large feature.
+
+Caller overrides look like `bv: 3`, `size: 2`, or `release: 4.1.0 Security hardening` in the skill invocation. If those are absent, score BV/Size yourself and keep Release at **No Release**.
+
 ## Drafting Rules
 
 Write for another coding agent that will implement from the issue alone.
@@ -117,11 +140,22 @@ Write for another coding agent that will implement from the issue alone.
 
 ## Filing Workflow
 
-1. Draft the title, labels, milestone, and body.
+1. Draft the title, labels, milestone, body, BV, Size, and Release. Release is **No Release** unless the caller named a current board release.
 2. Re-check duplicates with targeted `gh issue list --search`.
-3. If filing, run `gh issue create --repo ross-slaney/sqlos --title ... --body-file ... --label ...` and add `--milestone` only when certain.
-4. If a needed label does not exist, create a narrow label only when the user requested that taxonomy or the issue family already has a clear label pattern.
-5. Return the issue URL plus the metadata assigned. Mention any field intentionally left unset.
+3. If the user asked for a draft only, stop here. Do not run `gh issue create` and do not add a project item.
+4. If filing, run `gh issue create --repo ross-slaney/sqlos --title ... --body-file ... --label ...` and add `--milestone` only when certain.
+5. Immediately add the new issue to the roadmap and set required fields. Prefer the helper so field names stay current:
+
+```bash
+bash .agents/skills/create-sqlos-issue/scripts/add-sqlos-issue-to-roadmap.sh \
+  --issue <number-or-url> \
+  --bv <1-4> \
+  --size <1-4>
+```
+
+Add `--release "<exact board option>"` only when the caller provided one. Add `--status Backlog` and `--track "<exact board option>"` when those are defensible. The helper looks up options by field name; do not hard-code GraphQL option IDs.
+6. If a needed label does not exist, create a narrow label only when the user requested that taxonomy or the issue family already has a clear label pattern.
+7. Return the issue URL plus labels, BV, Size, and Release. List Status and Track only when set. Mention any other field intentionally left unset. If project add or field assignment fails after `gh issue create`, report the issue URL and the exact error. Do not pretend the issue is scored.
 
 ## Quality Bar
 
