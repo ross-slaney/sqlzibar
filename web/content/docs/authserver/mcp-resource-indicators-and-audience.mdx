@@ -43,7 +43,7 @@ If no `resource` is supplied, SqlOS can preserve the client-audience fallback fo
 
 ## Configuration
 
-Resource indicators are enabled in the raw multi-client defaults. `UseSingleApplication(...)` deliberately disables them for the simpler one-app model, so enable them explicitly before expecting a supplied `resource` value to control `aud` in that mode.
+Resource indicators are enabled in the raw multi-client defaults. `UseSingleApplication(...)` keeps them off for the simpler one-app model unless you declare an `Mcp` surface (`app.Mcp("/mcp", ...)`), which turns them on together with CIMD because portable MCP clients need both. Without an MCP surface, enable them explicitly before expecting a supplied `resource` value to control `aud`.
 
 You can configure them directly:
 
@@ -76,7 +76,7 @@ Your protected resource should still:
 - return `WWW-Authenticate: Bearer resource_metadata="..."`
 - validate issuer, signature, expiry, and audience
 
-The Todo sample demonstrates that end to end.
+Hosts using `UseSingleApplication` or `ConfigureApplication` get all three from the `Api`/`Mcp` declarations: SqlOS serves `/.well-known/oauth-protected-resource` for the API and `/.well-known/oauth-protected-resource{Mcp}` for the MCP surface, and challenges unauthenticated requests under each prefix with the matching `resource_metadata`. The Todo sample demonstrates the explicit version end to end.
 
 ## Recommended rule of thumb
 

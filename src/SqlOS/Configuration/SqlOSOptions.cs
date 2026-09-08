@@ -37,9 +37,12 @@ public sealed class SqlOSOptions
     /// <returns>The same options instance so that additional configuration can be chained.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="name"/> is empty or contains only whitespace.</exception>
     /// <remarks>
-    /// Single-application mode disables dynamic client registration and resource indicators, and
-    /// can apply the application name to the hosted sign-in page and transactional email branding.
-    /// It cannot be combined with explicit startup client seeds.
+    /// Single-application mode seeds one first-party PKCE client and can apply the application
+    /// name to the hosted sign-in page and transactional email branding. Declaring
+    /// <see cref="SqlOSApplicationOptions.Api"/> or <see cref="SqlOSApplicationOptions.Mcp"/>
+    /// makes SqlOS protect those same-process paths and serve their protected-resource metadata;
+    /// an MCP surface also enables client ID metadata documents and resource indicators. Dynamic
+    /// client registration stays off. It cannot be combined with explicit startup client seeds.
     /// </remarks>
     public SqlOSOptions UseSingleApplication(string name, Action<SqlOSSingleApplicationOptions>? configure = null)
     {
@@ -58,12 +61,19 @@ public sealed class SqlOSOptions
     /// </exception>
     /// <remarks>
     /// The section supports <c>Name</c>, <c>Origin</c>, <c>ClientId</c>, <c>Audience</c>,
-    /// <c>RedirectPath</c>, <c>RedirectUris</c>, <c>AllowedScopes</c>,
+    /// <c>Api</c>, <c>Mcp</c>, <c>RedirectPath</c>, <c>RedirectUris</c>, <c>AllowedScopes</c>,
     /// <c>EnabledCredentialTypes</c>, and the single-application branding switches.
     /// </remarks>
     public SqlOSOptions UseSingleApplication(IConfiguration configuration, string sectionName = "SqlOS:Application")
     {
         AuthServer.UseSingleApplication(configuration, sectionName);
+        return this;
+    }
+
+    /// <summary>Describes the host independently of client registration. Use SeedClient, the admin API, or the dashboard for clients.</summary>
+    public SqlOSOptions ConfigureApplication(string name, Action<SqlOSApplicationOptions> configure)
+    {
+        AuthServer.ConfigureApplication(name, configure);
         return this;
     }
 

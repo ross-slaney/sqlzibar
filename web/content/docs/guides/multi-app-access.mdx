@@ -43,6 +43,11 @@ Use one stable client ID and exact callback list per surface. This example gives
 ```csharp
 builder.AddSqlOS<AppDbContext>(options =>
 {
+    options.ConfigureApplication("Atlas Suite", application =>
+    {
+        application.Origin = "https://identity.atlas.test";
+        application.Brand(page => page.PrimaryColor = "#0f172a");
+    });
     var auth = options.AuthServer;
     auth.PublicOrigin = "https://identity.atlas.test";
     auth.Issuer = "https://identity.atlas.test/sqlos/auth";

@@ -76,7 +76,6 @@ builder.AddSqlOS<AppDbContext>(options =>
 });
 
 var app = builder.Build();
-app.MapSqlOS();
 ```
 
 That mounts the SqlOS auth routes and dashboard inside your app. Users, organizations, clients, sessions, refresh tokens, SSO configuration, and FGA data live in SQL Server.

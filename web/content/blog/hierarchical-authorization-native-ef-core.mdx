@@ -196,7 +196,6 @@ builder.AddSqlOS<AppDbContext>(
 
 var app = builder.Build();
 
-app.MapSqlOS();
 
 var api = app.MapGroup("/api")
     .RequireSqlOSAccessToken(apiAudience);

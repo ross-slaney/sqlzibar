@@ -2,7 +2,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http.Json;
-using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
@@ -162,18 +161,66 @@ builder.AddSqlOS<TodoSampleDbContext>(
             }
         });
 
-        auth.SeedAuthPage(page =>
+        // This host has web, Razor Pages, CLI, and broker clients, each seeded below.
+        options.ConfigureApplication("SqlOS Todo", application =>
         {
-            page.PageTitle = sampleConfig.EnableEmailOtp || enablePhoneOtp ? "Check your code. Ship the Todo app." : "Ship the Todo app first.";
-            page.PageSubtitle = sampleConfig.EnableEmailOtp || enablePhoneOtp
-                ? "Use passwordless email or SMS codes for sign in and sign up, then land back in the hosted-first Todo sample."
-                : "Start with hosted auth, then graduate to headless and public-client onboarding when you need it.";
-            page.PrimaryColor = "#0f172a";
-            page.AccentColor = "#2563eb";
-            page.BackgroundColor = "#f8fafc";
-            page.Layout = "split";
-            page.EnablePasswordSignup = passwordAuthEnabled;
-            page.EnabledCredentialTypes = enabledCredentialTypes;
+            application.Origin = publicOrigin;
+            application.AllowedScopes = sampleConfig.AllowedScopes;
+            // Keep the configurable Todo resource audience and per-operation scopes.
+            // Api = "/api" would instead derive {Origin}/api as the resource audience.
+            application.Brand(page =>
+            {
+                page.PageTitle = sampleConfig.EnableEmailOtp || enablePhoneOtp ? "Check your code. Ship the Todo app." : "Ship the Todo app first.";
+                page.PageSubtitle = sampleConfig.EnableEmailOtp || enablePhoneOtp
+                    ? "Use passwordless email or SMS codes for sign in and sign up, then land back in the hosted-first Todo sample."
+                    : "Start with hosted auth, then graduate to headless and public-client onboarding when you need it.";
+                page.PrimaryColor = "#0f172a";
+                page.AccentColor = "#2563eb";
+                page.BackgroundColor = "#f8fafc";
+                page.Layout = "split";
+                page.EnablePasswordSignup = passwordAuthEnabled;
+                page.EnabledCredentialTypes = enabledCredentialTypes;
+            });
+
+            if (sampleConfig.EnableHeadless)
+            {
+                application.Headless(sampleConfig.HeadlessUiPath);
+            }
+
+            application.Authorization(seed =>
+            {
+                seed.ResourceType(
+                    TodoFgaService.TenantResourceTypeId,
+                    "Tenant",
+                    "Per-user tenant root for the Todo sample.");
+                seed.ResourceType(
+                    TodoFgaService.TodoResourceTypeId,
+                    "Todo",
+                    "Individual todo items in the Todo sample.");
+                seed.Permission(
+                    "perm_tenant_create_todo",
+                    TodoFgaService.TenantCreateTodoPermission,
+                    "Create todos",
+                    TodoFgaService.TenantResourceTypeId);
+                seed.Permission(
+                    "perm_todo_read",
+                    TodoFgaService.TodoReadPermission,
+                    "Read todos",
+                    TodoFgaService.TodoResourceTypeId);
+                seed.Permission(
+                    "perm_todo_write",
+                    TodoFgaService.TodoWritePermission,
+                    "Write todos",
+                    TodoFgaService.TodoResourceTypeId);
+                seed.Role(
+                    "role_tenant_owner",
+                    TodoFgaService.TenantOwnerRole,
+                    "Tenant Owner",
+                    "Single-user owner role for the Todo sample.");
+                seed.RolePermission(TodoFgaService.TenantOwnerRole, TodoFgaService.TenantCreateTodoPermission);
+                seed.RolePermission(TodoFgaService.TenantOwnerRole, TodoFgaService.TodoReadPermission);
+                seed.RolePermission(TodoFgaService.TenantOwnerRole, TodoFgaService.TodoWritePermission);
+            });
         });
 
         auth.SeedAuthEmails(email =>
@@ -242,41 +289,6 @@ builder.AddSqlOS<TodoSampleDbContext>(
             sampleConfig.Resource,
             sampleConfig.AllowedScopes.ToArray());
 
-        options.Fga.Seed(seed =>
-        {
-            seed.ResourceType(
-                TodoFgaService.TenantResourceTypeId,
-                "Tenant",
-                "Per-user tenant root for the Todo sample.");
-            seed.ResourceType(
-                TodoFgaService.TodoResourceTypeId,
-                "Todo",
-                "Individual todo items in the Todo sample.");
-            seed.Permission(
-                "perm_tenant_create_todo",
-                TodoFgaService.TenantCreateTodoPermission,
-                "Create todos",
-                TodoFgaService.TenantResourceTypeId);
-            seed.Permission(
-                "perm_todo_read",
-                TodoFgaService.TodoReadPermission,
-                "Read todos",
-                TodoFgaService.TodoResourceTypeId);
-            seed.Permission(
-                "perm_todo_write",
-                TodoFgaService.TodoWritePermission,
-                "Write todos",
-                TodoFgaService.TodoResourceTypeId);
-            seed.Role(
-                "role_tenant_owner",
-                TodoFgaService.TenantOwnerRole,
-                "Tenant Owner",
-                "Single-user owner role for the Todo sample.");
-            seed.RolePermission(TodoFgaService.TenantOwnerRole, TodoFgaService.TenantCreateTodoPermission);
-            seed.RolePermission(TodoFgaService.TenantOwnerRole, TodoFgaService.TodoReadPermission);
-            seed.RolePermission(TodoFgaService.TenantOwnerRole, TodoFgaService.TodoWritePermission);
-        });
-
         auth.EnablePortableMcpClients(registration =>
         {
             foreach (var host in cimdTrustedHosts)
@@ -291,26 +303,6 @@ builder.AddSqlOS<TodoSampleDbContext>(
             auth.ClientRegistration.Dcr.AllowHttpsRedirectUris = true;
             auth.ClientRegistration.Dcr.AllowLoopbackRedirectUris = true;
         }
-
-        if (sampleConfig.EnableHeadless)
-        {
-            auth.UseHeadlessAuthPage(headless =>
-            {
-                headless.BuildUiUrl = ctx => QueryHelpers.AddQueryString(
-                    $"{publicOrigin}{sampleConfig.HeadlessUiPath}",
-                    new Dictionary<string, string?>
-                    {
-                        ["request"] = ctx.RequestId,
-                        ["view"] = ctx.View,
-                        ["error"] = ctx.Error,
-                        ["email"] = ctx.Email,
-                        ["pendingToken"] = ctx.PendingToken,
-                        ["mfaToken"] = ctx.MfaToken,
-                        ["displayName"] = ctx.DisplayName,
-                        ["ui_context"] = ctx.UiContext?.ToJsonString()
-                    });
-            });
-        }
     });
 
 var app = builder.Build();
@@ -320,7 +312,6 @@ app.UseSwaggerUI();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseCors("todo-emcy-frontend");
-app.MapSqlOS();
 
 app.MapGet("/sample/config", async (
     IOptions<TodoSampleOptions> sampleOptions,

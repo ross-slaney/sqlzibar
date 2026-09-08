@@ -72,6 +72,9 @@ public class SqlOSAuthServerOptions
     public SqlOSAuthEmailSeedOptions? AuthEmailSeed { get; private set; }
     public SqlOSMfaSeedOptions? MfaSeed { get; private set; }
     public SqlOSSingleApplicationOptions? SingleApplication { get; private set; }
+
+    /// <summary>The host description, shared by the single-client preset and explicit client registration.</summary>
+    public SqlOSApplicationOptions? Application { get; private set; }
     public List<SqlOSClientSeedOptions> ClientSeeds { get; } = [];
     public List<SqlOSOidcConnectionSeedOptions> OidcConnectionSeeds { get; } = [];
     public List<SqlOSSamlConnectionSeedOptions> SamlConnectionSeeds { get; } = [];
@@ -296,9 +299,51 @@ public class SqlOSAuthServerOptions
         }
 
         SingleApplication = application;
-        ClientRegistration.Cimd.Enabled = false;
-        ResourceIndicators.Enabled = false;
-        ApplySingleApplicationBranding(application);
+        return ConfigureApplicationCore(application, singleClientDefaults: true);
+    }
+
+    /// <summary>Describes the host without seeding a client. Register clients through the existing seeds, API, or dashboard.</summary>
+    public SqlOSAuthServerOptions ConfigureApplication(string name, Action<SqlOSApplicationOptions> configure)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(configure);
+        var application = new SqlOSApplicationOptions { Name = name };
+        configure(application);
+        SingleApplication = null;
+        return ConfigureApplicationCore(application, singleClientDefaults: false);
+    }
+
+    private SqlOSAuthServerOptions ConfigureApplicationCore(SqlOSApplicationOptions application, bool singleClientDefaults)
+    {
+        Application = application;
+
+        // Single-application mode keeps CIMD and resource indicators off unless the description
+        // declares an MCP surface: portable MCP clients (Codex, ChatGPT desktop, Claude) identify
+        // themselves with client ID metadata documents and bind tokens to the MCP resource.
+        // Declaring `Api` alone changes nothing here; the first-party client simply receives the
+        // API audience. DCR stays an explicit opt-in (EnableChatGptCompatibility).
+        var hostsMcp = SqlOSSingleApplicationSurfaces.HasMcp(application);
+        if (hostsMcp || singleClientDefaults)
+        {
+            ClientRegistration.Cimd.Enabled = hostsMcp;
+            ResourceIndicators.Enabled = hostsMcp;
+        }
+        if (hostsMcp
+            && string.Equals(DefaultAudience, SqlOSSingleApplicationSurfaces.DefaultAudienceSentinel, StringComparison.Ordinal)
+            && SqlOSSingleApplicationSurfaces.ResolveMcpAudience(application) is { } mcpAudience)
+        {
+            // Portable clients that omit `resource` still receive a token usable at the MCP surface.
+            DefaultAudience = mcpAudience;
+        }
+
+        ApplyApplicationBranding(application);
+
+        foreach (var configure in application.HeadlessConfigurations)
+        {
+            // `app.Headless(...)` is UseHeadlessAuthPage moved inside the application description.
+            UseHeadlessAuthPage(configure);
+        }
+
         return this;
     }
 
@@ -316,6 +361,8 @@ public class SqlOSAuthServerOptions
             Origin = section["Origin"],
             ClientId = section["ClientId"],
             Audience = section["Audience"],
+            Api = section["Api"],
+            Mcp = section["Mcp"],
             RedirectPath = section["RedirectPath"] ?? "/auth/callback",
             EnablePasswordSignup = ReadBool(section, "EnablePasswordSignup", true),
             ConfigureAuthPageBranding = ReadBool(section, "ConfigureAuthPageBranding", true),
@@ -516,7 +563,7 @@ public class SqlOSAuthServerOptions
         return this;
     }
 
-    private void ApplySingleApplicationBranding(SqlOSSingleApplicationOptions application)
+    private void ApplyApplicationBranding(SqlOSApplicationOptions application)
     {
         if (application.ConfigureAuthPageBranding && AuthPageSeed == null)
         {
@@ -529,6 +576,19 @@ public class SqlOSAuthServerOptions
                     .Select(static value => value.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+            });
+        }
+
+        if (application.BrandConfigurations.Count > 0)
+        {
+            // `app.Brand(...)` is SeedAuthPage moved inside the application description; it layers
+            // on top of the defaults above (or an earlier explicit SeedAuthPage call).
+            SeedAuthPage(page =>
+            {
+                foreach (var configure in application.BrandConfigurations)
+                {
+                    configure(page);
+                }
             });
         }
 

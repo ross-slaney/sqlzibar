@@ -31,7 +31,7 @@ http://localhost:3020 and click **Sign in with X**:
 
 ## What to look at
 
-- `AppX/Program.cs` — the entire identity provider is one `AddSqlOS` call:
+- `AppX/Program.cs` — the identity provider uses one `AddSqlOS` call with `ConfigureApplication("X", ...)` and `Brand`, plus explicit client seeds:
   branding, the `app-y` client seed (public PKCE, deliberately
   `IsFirstParty = false`), and `SeedScopeDisplayName` entries for the consent
   screen.

@@ -17,11 +17,22 @@ order: 2
 
 <CardGrid cols={2}>
   <Card title="Native ASP.NET Core login" description="Razor Pages, built-in OAuth middleware, PKCE, encrypted cookies, a protected API call, and revoking logout." href="/docs/quickstarts/aspnet-core-login" />
-  <Card title="Smallest complete backend" description="One Todo API with hosted login, PostgreSQL, bearer tokens, Swagger, and FGA-filtered data." href="/docs/quickstarts/run-todo" />
+  <Card title="Single application with API and MCP" description="Notes uses UseSingleApplication, hosted sign-in, a protected API, and tools sharing one authorization service." href="https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api" />
+  <Card title="Multiple clients on one Todo host" description="ConfigureApplication with Razor Pages, CLI, and broker clients, hosted login, and FGA-filtered data." href="/docs/quickstarts/run-todo" />
   <Card title="Broad product tour" description="Two APIs and ASP.NET Core, Next.js, and Angular clients orchestrated with .NET Aspire." href="/docs/quickstarts/run-example-stack" />
   <Card title="Terminal OAuth" description="A .NET CLI using Device Authorization Grant, token polling, refresh, and protected Todo commands." href="/docs/authserver/cli-oauth" />
   <Card title="Sign in with your app" description="SqlOS as an OpenID Provider: a Next.js + Auth.js relying party federates through OIDC discovery, consent, and remembered grants." href="/docs/authserver/openid-provider" />
 </CardGrid>
+
+## Single application: Notes
+
+The [Notes sample](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api) is the complete `UseSingleApplication` example. Supply a SQL Server or PostgreSQL connection as described in its README, then run:
+
+```bash
+dotnet run --project examples/SqlOS.OneCall.Api
+```
+
+Open `http://localhost:5085`, sign in through AuthPage, and add a note. Connect an MCP client to `/mcp` to access the same notebook. `Api`, `Mcp`, `Brand`, and `Authorization` describe the host; its API and tools call the same FGA-enforcing service. The walkthrough includes another user's isolation, revocation, restoration, and logout.
 
 ## Path 1: the .NET-first stack
 
@@ -76,10 +87,22 @@ The AppHost starts these user-facing surfaces:
 
 The authenticated Aspire dashboard URL is printed at startup; its configured listener is `https://localhost:18888`.
 
+## Application API coverage
+
+| Host | API | Clients |
+| --- | --- | --- |
+| Notes | `UseSingleApplication` with `Api`, `Mcp`, `Brand`, `Authorization` | One derived first-party browser client; portable MCP clients connect to the protected resource |
+| Retail | `ConfigureApplication` with `Brand`, `Headless`, `Authorization` | Explicit Next.js, Angular, and Expo clients |
+| Todo | `ConfigureApplication` with `Brand`, optional `Headless`, `Authorization` | Explicit hosted-demo, Razor Pages, CLI, and broker clients |
+| App X | `ConfigureApplication` with `Brand` | Explicit App Y relying party; dedicated OIDC provider |
+
+Retail retains its public demo/auth routes and additional demo credential types. Todo retains its configurable resource audience and per-operation scope checks. Notes demonstrates derived bearer-only API/MCP protection. The browser and native clients continue using their standard OIDC libraries with hosted AuthPage or `@sqlos/headless`.
+
 ## Complete catalog
 
 | Project | Runtime status | Best source material |
 | --- | --- | --- |
+| `SqlOS.OneCall.Api` | Standalone Notes host; real SQL Server/PostgreSQL browser/API/MCP integration coverage | [README and source](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api) |
 | `SqlOS.Example.AspNetCoreWeb` | Launched by both AppHosts; implements login, refresh, protected API, and revoking logout | [README and source](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.Example.AspNetCoreWeb) |
 | `SqlOS.Todo.Api` | Canonical focused API; real-SQL integration coverage | [README and source](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.Todo.Api) |
 | `SqlOS.Example.Api` | Broad embedded platform example; real-SQL integration coverage | [README and source](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.Example.Api) |

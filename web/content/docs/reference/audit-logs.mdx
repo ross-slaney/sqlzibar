@@ -259,7 +259,7 @@ The older AuthServer audit route links into the same central view filtered to `s
 
 ## Admin API
 
-Admin APIs are mounted when you call `app.MapSqlOS()`. They are protected by the same dashboard authorization as `/sqlos/admin`: password-mode dashboard sessions, your configured `Dashboard.AuthorizationCallback`, or your deployment's dashboard-facing proxy/SSO controls. Unauthorized requests return `404`.
+Admin APIs are mounted by `AddSqlOS` at startup. They are protected by the same dashboard authorization as `/sqlos/admin`: password-mode dashboard sessions, your configured `Dashboard.AuthorizationCallback`, or your deployment's dashboard-facing proxy/SSO controls. Unauthorized requests return `404`.
 
 Default base path:
 

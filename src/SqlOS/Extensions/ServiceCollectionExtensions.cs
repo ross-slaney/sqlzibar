@@ -37,8 +37,12 @@ public static class ServiceCollectionExtensions
         SqlOSPathDefaults.Apply(options);
         options.AuthServer.Dashboard = options.Dashboard;
         options.Fga.Dashboard = options.Dashboard;
+        SqlOSSingleApplicationSurfaces.ApplyHostConfiguration(options);
         SqlOSOptionsValidator.ValidateOrThrow(options);
 
+        services.AddRouting();
+        services.AddSingleton<SqlOSEndpointMappingState>();
+        services.AddSingleton<SqlOSSurfaceProtectionState>();
         services.AddSingleton(Options.Create(options));
         services.AddSingleton(Options.Create(options.AuthServer));
         services.AddSingleton(Options.Create(options.Fga));
@@ -147,6 +151,11 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<SqlOSCalendarSyncHostedService>();
         services.AddHostedService<SqlOSBootstrapHostedService>();
         services.AddSingleton<IStartupFilter, SqlOSPipelineStartupFilter>();
+
+        foreach (var extension in options.AuthServer.Application?.HostExtensions ?? [])
+        {
+            extension.ConfigureServices(services, options);
+        }
 
         return services;
     }

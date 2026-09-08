@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,10 +7,92 @@ const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
 const snippetSpecs = [
   {
+    name: "standalone multi-client host", relativePath: "web/content/docs/guides/standalone-identity-server.mdx",
+    heading: "## 1. Configure the auth host", marker: "var builder = WebApplication.CreateBuilder(args);",
+    wrap: asCompleteProgram,
+  },
+  ...[
+    ["web/content/docs/guides/standalone-identity-server.mdx", "## 5. Validate tokens in resource APIs"],
+    ["web/content/docs/reference/standalone-identity-server.mdx", "## Resource API validation"],
+  ].map(([relativePath, heading]) => ({
+    name: "separate resource API", relativePath, heading,
+    marker: "builder.Services.AddAuthentication",
+    wrap: (snippet) => `var builder = WebApplication.CreateBuilder(args);\n${snippet}`,
+  })),
+  {
+    name: "multiple-application migration", relativePath: "web/content/docs/authserver/multiple-applications.mdx",
+    heading: "## Graduate an existing application", marker: "builder.AddSqlOS<AppDbContext>",
+    wrap: (snippet) => snippet.replace("builder.AddSqlOS<AppDbContext>", `using SqlOS;
+using AcmeTools = SqlOS.OneCall.Api.NotesMcpTools;
+var builder = WebApplication.CreateBuilder(args);
+var connectionString = "Server=localhost;Database=acme;Integrated Security=True;TrustServerCertificate=True";
+builder.AddSqlOS<AppDbContext>`) + `
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : SqlOSDbContext<AppDbContext>(options);
+`,
+  },
+  {
+    name: "README additional API scope", relativePath: "README.md",
+    heading: "### API protection and middleware ordering", marker: "app.MapGroup",
+    wrap: (snippet) => `using SqlOS.AuthServer.Extensions;
+using SqlOS.Extensions;
+var app = WebApplication.CreateBuilder(args).Build();
+const string origin = "https://acme.example.com";
+${snippet}`,
+  },
+  ...[
+    "### Complete identity-provider host",
+    "### Complete downstream OIDC application",
+  ].map((heading) => ({
+    name: "README complete OIDC program",
+    relativePath: "README.md", heading,
+    marker: "var builder = WebApplication.CreateBuilder(args);",
+    wrap: asCompleteProgram,
+  })),
+  {
+    name: "README MCP registration", relativePath: "README.md",
+    heading: "### `app.Mcp(...)`: register tools and protect the server",
+    marker: "builder.AddSqlOS<NotesDbContext>",
+    wrap: (snippet) => snippet.replace("builder.Services.AddScoped", 'var builder = WebApplication.CreateBuilder(args);\nvar connectionString = "Server=localhost;Database=notes;Integrated Security=True;TrustServerCertificate=True";\nbuilder.Services.AddScoped'),
+  },
+  {
+    name: "README MCP tools", relativePath: "README.md",
+    heading: "### `app.Mcp(...)`: register tools and protect the server",
+    marker: "public sealed class NotesMcpTools",
+    wrap: (snippet) => snippet.replace("public sealed class NotesMcpTools", "var builder = WebApplication.CreateBuilder(args);\nbuilder.Build().Run();\n\npublic sealed class NotesMcpTools"),
+  },
+  {
+    name: "README FGA service", relativePath: "README.md",
+    heading: "### `app.Authorization(...)`: vocabulary, grants, and enforcement",
+    marker: "public async Task<IReadOnlyList<Note>> ListAsync",
+    wrap: (snippet) => `using Microsoft.EntityFrameworkCore;
+using SqlOS.Extensions;
+using SqlOS.Fga.Interfaces;
+using SqlOS.OneCall.Api;
+var builder = WebApplication.CreateBuilder(args);
+builder.Build().Run();
+public sealed class DocumentedNotesService(NotesDbContext db, ISqlOSFgaAuthService fga)
+{
+${snippet}
+${extractCsharpBlock({ relativePath: "README.md", heading: "### `app.Authorization(...)`: vocabulary, grants, and enforcement", marker: "private async Task CreateNotebookIfMissingAsync" })}
+}
+`,
+  },
+  {
+    name: "README branding", relativePath: "README.md",
+    heading: "## `app.Brand(...)`: hosted pages and ownership", marker: "app.Brand(page =>",
+    wrap: (snippet) => `using SqlOS.Configuration;
+new SqlOSOptions().UseSingleApplication("Acme", app => { ${snippet} });`,
+  },
+  {
+    name: "README SCIM administration", relativePath: "README.md",
+    heading: "### SCIM: provision into SqlOS", marker: "await using var scope",
+    wrap: (snippet) => snippet.replace("await using var scope", 'var app = WebApplication.CreateBuilder(args).Build();\nvar organizationId = "org_acme";\nawait using var scope'),
+  },
+  {
     name: "README first-run program",
     relativePath: "README.md",
-    heading: "## Add SqlOS to your app",
-    marker: "builder.AddSqlOS<AppDbContext>",
+    heading: "### Add it to a project",
+    marker: "var builder = WebApplication.CreateBuilder(args);",
     wrap: asCompleteProgram,
   },
   ...[
@@ -389,7 +470,11 @@ public sealed class Workspace : IHasResourceId
 `;
 }
 
-const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sqlos-doc-snippets-"));
+// Keep project references on the same canonical filesystem tree. macOS temp-directory
+// symlinks can otherwise make MSBuild compute invalid transitive relative paths.
+const artifactsRoot = path.join(repoRoot, "artifacts");
+fs.mkdirSync(artifactsRoot, { recursive: true });
+const tempRoot = fs.mkdtempSync(path.join(artifactsRoot, "sqlos-doc-snippets-"));
 const projectPath = path.join(tempRoot, "SqlOS.Docs.Snippet.csproj");
 const sourceProject = path.join(repoRoot, "src", "SqlOS", "SqlOS.csproj");
 
@@ -403,7 +488,9 @@ try {
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
     <ProjectReference Include="${sourceProject}" />
+    <ProjectReference Include="${path.join(repoRoot, "examples", "SqlOS.OneCall.Api", "SqlOS.OneCall.Api.csproj")}" />
   </ItemGroup>
 </Project>
 `,

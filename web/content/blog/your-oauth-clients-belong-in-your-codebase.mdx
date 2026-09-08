@@ -83,7 +83,6 @@ builder.AddSqlOS<AppDbContext>(
     });
 
 var app = builder.Build();
-app.MapSqlOS();
 app.Run();
 
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options)

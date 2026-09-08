@@ -117,6 +117,7 @@ internal static class SqlOSOptionsValidator
         ValidatePasswordLoginAbuseOptions(options.AuthServer.PasswordLogin, errors);
         ValidateMfaOptions(options.AuthServer.Mfa, errors);
         ValidateAccessTokenValidationOptions(options.AuthServer, errors);
+        ValidateSingleApplicationSurfaces(options, dashboardBasePath, authBasePath, errors);
         ValidateClientRegistrationOptions(options.AuthServer, errors);
         ValidateSigningKeyOptions(options.AuthServer, errors);
         ValidateOpenIdProviderOptions(options.AuthServer, errors);
@@ -414,6 +415,130 @@ internal static class SqlOSOptionsValidator
             errors.Add("AuthServer.PasswordLogin.LockoutDuration must be greater than zero.");
         }
     }
+
+    /// <summary>
+    /// Fail-fast rules for the single-application <c>Api</c>/<c>Mcp</c> surfaces. Every message
+    /// names the offending property so the startup exception points at the line to change.
+    /// </summary>
+    private static void ValidateSingleApplicationSurfaces(
+        SqlOSOptions options,
+        string? dashboardBasePath,
+        string? authBasePath,
+        List<string> errors)
+    {
+        var application = options.AuthServer.Application;
+        if (application == null)
+        {
+            return;
+        }
+
+        var property = options.AuthServer.SingleApplication != null ? "AuthServer.SingleApplication" : "AuthServer.Application";
+        var hasApi = application.Api != null;
+        var hasMcp = application.Mcp != null;
+        if (!hasApi && !hasMcp)
+        {
+            return;
+        }
+
+        var apiPath = hasApi ? ValidateSurfacePath(application.Api, $"{property}.Api", dashboardBasePath, authBasePath, errors) : null;
+        var mcpPath = hasMcp ? ValidateSurfacePath(application.Mcp, $"{property}.Mcp", dashboardBasePath, authBasePath, errors) : null;
+
+        if (apiPath != null && mcpPath != null
+            && (string.Equals(apiPath, mcpPath, StringComparison.OrdinalIgnoreCase)
+                || apiPath.StartsWith(mcpPath + "/", StringComparison.OrdinalIgnoreCase)
+                || mcpPath.StartsWith(apiPath + "/", StringComparison.OrdinalIgnoreCase)))
+        {
+            errors.Add($"{property}.Api ('{apiPath}') and {property}.Mcp ('{mcpPath}') must be distinct, non-nested path prefixes.");
+        }
+
+        if (SqlOSSingleApplicationSurfaces.TryGetOrigin(application) == null)
+        {
+            errors.Add($"{property}.Origin must be an absolute http(s) origin without path, query, or fragment when {property}.Api or {property}.Mcp is set.");
+        }
+
+        if (apiPath != null
+            && application is SqlOSSingleApplicationOptions single
+            && !string.IsNullOrWhiteSpace(single.Audience)
+            && SqlOSSingleApplicationSurfaces.ResolveApiAudience(application) is { } apiAudience
+            && !string.Equals(single.Audience.Trim(), apiAudience, StringComparison.Ordinal))
+        {
+            errors.Add($"{property}.Audience must be '{apiAudience}' (or left unset) when {property}.Api is '{apiPath}': the browser client and the API must agree on the token audience.");
+        }
+
+        if (mcpPath != null)
+        {
+            if (!options.AuthServer.ClientRegistration.Cimd.Enabled)
+            {
+                errors.Add($"{property}.Mcp is set but AuthServer.ClientRegistration.Cimd.Enabled is false. Declaring an MCP surface enables client ID metadata documents; remove the later ConfigureClientRegistration/ClientRegistration.Cimd.Enabled = false call or remove {property}.Mcp.");
+            }
+
+            if (!options.AuthServer.ResourceIndicators.Enabled)
+            {
+                errors.Add($"{property}.Mcp is set but AuthServer.ResourceIndicators.Enabled is false. Declaring an MCP surface enables resource indicators; remove the later ConfigureResourceIndicators/ResourceIndicators.Enabled = false call or remove {property}.Mcp.");
+            }
+        }
+    }
+
+    private static string? ValidateSurfacePath(
+        string? value,
+        string name,
+        string? dashboardBasePath,
+        string? authBasePath,
+        List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            errors.Add($"{name} cannot be empty. Set an absolute path prefix such as '/api', or leave it null.");
+            return null;
+        }
+
+        if (value.Contains('?') || value.Contains('#'))
+        {
+            errors.Add($"{name} must be a path only, without query string or fragment.");
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+        {
+            errors.Add($"{name} must be an absolute path prefix starting with '/'.");
+            return null;
+        }
+
+        normalized = NormalizeRootPath(normalized);
+        if (normalized == "/")
+        {
+            errors.Add($"{name} cannot be '/'. Use a dedicated prefix such as '/api' so the application root stays unauthenticated.");
+            return null;
+        }
+
+        if (string.Equals(normalized, "/.well-known", StringComparison.OrdinalIgnoreCase)
+            || normalized.StartsWith("/.well-known/", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add($"{name} cannot be under '/.well-known'; SqlOS serves protected-resource metadata there.");
+            return null;
+        }
+
+        if (dashboardBasePath != null && OverlapsRoot(normalized, dashboardBasePath))
+        {
+            errors.Add($"{name} ('{normalized}') must not be equal to or under DashboardBasePath ('{dashboardBasePath}').");
+            return null;
+        }
+
+        if (authBasePath != null && OverlapsRoot(normalized, authBasePath))
+        {
+            errors.Add($"{name} ('{normalized}') must not be equal to or under AuthServer.BasePath ('{authBasePath}').");
+            return null;
+        }
+
+        return normalized;
+    }
+
+    private static bool OverlapsRoot(string path, string root)
+        => root == "/"
+            || string.Equals(path, root, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
+            || root.StartsWith(path + "/", StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateAccessTokenValidationOptions(SqlOSAuthServerOptions options, List<string> errors)
     {

@@ -209,7 +209,6 @@ public sealed class SqlOSAdminAuthorizationMetadataTests
         builder.Services.RemoveAll<IHostedService>();
 
         var app = builder.Build();
-        app.MapSqlOS();
         await app.StartAsync();
         return app;
     }

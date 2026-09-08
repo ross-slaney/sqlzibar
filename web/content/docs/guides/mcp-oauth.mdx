@@ -18,6 +18,10 @@ section: guides
 
 This guide builds **Taskrail**, a fictional MCP server at `https://mcp.taskrail.test`. A portable client identifies itself with a metadata document, completes authorization code with PKCE, and receives a SqlOS access token whose `aud` is exactly the Taskrail MCP resource.
 
+<Callout type="info" title="Hosting the MCP server in your own SqlOS app? Use the one-call path">
+  When the MCP server lives in the same host as SqlOS, declare it inside `UseSingleApplication` or `ConfigureApplication` with `app.Mcp("/mcp", mcp => mcp.WithTools<MyTools>())` from the `SqlOS.Mcp` package. SqlOS then serves the protected-resource document, validates the audience under `/mcp`, enables CIMD and resource indicators, and hosts the server; steps 1, 2, and the route-group protection below are derived for you. See [MCP server](/docs/authserver/mcp-server). This guide covers the explicit, multi-client setup where the authorization server and the MCP resource are separate deployments.
+</Callout>
+
 <Callout type="info" title="Use the simpler client path when you can">
   If you own both the client and server, preregister a public PKCE client with `SeedClient` first. Use CIMD only when a stable HTTPS client identity must work across multiple authorization-server deployments.
 </Callout>
@@ -42,7 +46,7 @@ There are three independently verified identities:
 
 ## 1. Configure the authorization server
 
-This is an advanced multi-client setup. Do not combine it with `UseSingleApplication`, which disables CIMD and resource indicators.
+This is the explicit multi-client setup for an authorization server that protects an MCP resource on another origin. (In single-application mode, declaring an `Mcp` surface enables CIMD and resource indicators automatically; you only need `EnablePortableMcpClients` here because no surface is declared.)
 
 ```csharp
 const string publicOrigin = "https://auth.taskrail.test";
@@ -71,7 +75,7 @@ builder.AddSqlOS<AppDbContext>(options =>
 
 ## 2. Publish protected-resource metadata
 
-The MCP server owns this document. It tells a client which resource string to request and which issuer can authorize it:
+The MCP server owns this document. It tells a client which resource string to request and which issuer can authorize it. (Single-application hosts with `Api`/`Mcp` declared get it served by SqlOS at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource{Mcp}`.)
 
 ```csharp
 using System.Text.Json;
@@ -281,6 +285,7 @@ Taskrail clients can discover the authorization server, identify a portable publ
 
 ## Next steps
 
+- [MCP server](/docs/authserver/mcp-server)
 - [Client ID metadata documents](/docs/authserver/client-id-metadata-documents)
 - [MCP resource indicators and audience](/docs/authserver/mcp-resource-indicators-and-audience)
 - [Preregistration vs CIMD vs DCR](/docs/authserver/preregistration-vs-cimd-vs-dcr)

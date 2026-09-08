@@ -16,11 +16,11 @@ section: quickstarts
 
 ## Goal
 
-Compare hosted and headless auth, organization workflows, SSO, sessions, audit logs, and FGA across several clients without assembling the stack yourself.
+Compare hosted and headless auth, organization workflows, SSO, sessions, audit logs, and FGA across several clients without assembling the stack yourself. The retail host uses `ConfigureApplication` with `Brand`, `Headless`, and `Authorization`, plus separate Next.js, Angular, and Expo client registrations. The Todo host uses the same API for its separate client set.
 
 ## Prerequisites
 
-- SqlOS repository checked out at version 4.2.0;
+- SqlOS repository checked out at the PR branch until the new hosting API release is published;
 - .NET 9 SDK;
 - Node.js and npm;
 - Docker running with enough memory for SQL Server;
@@ -33,8 +33,7 @@ If you only want to see the normal hosted-login path, use [Run the Todo sample](
 From the repository root:
 
 ```bash
-npm install --prefix examples/SqlOS.Example.Web
-npm install --prefix examples/SqlOS.Example.AngularWeb
+./scripts/setup-js-examples.sh
 ```
 
 ## Run

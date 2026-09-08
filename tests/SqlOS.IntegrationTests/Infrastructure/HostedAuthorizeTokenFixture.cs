@@ -38,7 +38,11 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
 
     public static async Task<HostedAuthorizeTokenFixture> CreateAsync(
         string databasePrefix = "ScopeTokenPins",
-        Action<SqlOS.Configuration.SqlOSOptions>? configure = null)
+        Action<SqlOS.Configuration.SqlOSOptions>? configure = null,
+        Action<IServiceCollection>? configureServices = null,
+        Action<WebApplication>? configureApp = null,
+        bool mapAuthServer = true,
+        bool seedBrowserClient = true)
     {
         await using var bootstrapContext = await AspireFixture.CreateIsolatedAuthContextAsync(databasePrefix);
         var connectionString = bootstrapContext.Database.GetConnectionString()!;
@@ -53,7 +57,11 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
             options.AuthServer.Issuer = $"{TrustedOrigin}/sqlos/auth";
             options.AuthServer.PublicOrigin = TrustedOrigin;
             options.AuthServer.BasePath = "/sqlos/auth";
-            options.AuthServer.SeedBrowserClient(ClientId, "Scope Pin Client", RedirectUri);
+            if (seedBrowserClient)
+            {
+                options.AuthServer.SeedBrowserClient(ClientId, "Scope Pin Client", RedirectUri);
+            }
+
             options.AuthServer.SeedAuthPage(page =>
             {
                 page.EnabledCredentialTypes = ["password"];
@@ -62,9 +70,15 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
             configure?.Invoke(options);
         });
         builder.Services.RemoveAll<IHostedService>();
+        configureServices?.Invoke(builder.Services);
 
         var app = builder.Build();
-        app.MapAuthServer("/sqlos/auth");
+        if (mapAuthServer)
+        {
+            app.MapAuthServer("/sqlos/auth");
+        }
+
+        configureApp?.Invoke(app);
         await using (var scope = app.Services.CreateAsyncScope())
         {
             await scope.ServiceProvider.GetRequiredService<SqlOSBootstrapper>().InitializeAsync();
@@ -109,10 +123,18 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
         string? clientId = null,
         string? redirectUri = null,
         string? prompt = null,
-        bool usePost = false)
+        bool usePost = false,
+        IDictionary<string, string>? extraParameters = null)
     {
         var codeVerifier = CreateCodeVerifier();
         var parameters = BuildAuthorizeParameters(scope, state, nonce, prompt, maxAge: null, codeVerifier, omitState, clientId, redirectUri);
+        if (extraParameters != null)
+        {
+            foreach (var (key, value) in extraParameters)
+            {
+                parameters[key] = value;
+            }
+        }
 
         using var authorize = usePost
             ? await Client.PostAsync("/sqlos/auth/authorize", new FormUrlEncodedContent(
@@ -162,6 +184,56 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
 
     public async Task<string> SubmitPasswordLoginAsync(HostedAuthorizeStart started)
         => (await SubmitPasswordLoginWithSessionAsync(started)).Code;
+
+    /// <summary>
+    /// Submits the hosted password login and, when the client is not first-party and lands on
+    /// the consent interstitial, approves it. Returns the authorization code either way.
+    /// </summary>
+    public async Task<string> SubmitPasswordLoginApprovingConsentAsync(HostedAuthorizeStart started)
+    {
+        using var login = new HttpRequestMessage(HttpMethod.Post, "/sqlos/auth/login/password")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["requestId"] = started.RequestId,
+                ["email"] = Email,
+                ["password"] = Password,
+                ["__RequestVerificationToken"] = started.AntiforgeryToken
+            })
+        };
+        login.Headers.TryAddWithoutValidation("Cookie", started.AntiforgeryCookie);
+        login.Headers.TryAddWithoutValidation("Origin", TrustedOrigin);
+        using var response = await Client.SendAsync(login);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Uri? location;
+        if (response.StatusCode == HttpStatusCode.OK && body.Contains("/consent/approve", StringComparison.Ordinal))
+        {
+            var consent = new HostedConsentPage(
+                ExtractInputValue(body, "requestId"),
+                ExtractInputValue(body, "consentToken"),
+                ExtractInputValue(body, "__RequestVerificationToken"),
+                TryExtractCookie(response, "sqlos_auth_page_csrf_") ?? started.AntiforgeryCookie,
+                body);
+            using var approved = await SubmitConsentDecisionAsync(consent, approve: true);
+            location = await ReadClientRedirectAsync(approved);
+        }
+        else
+        {
+            location = TryReadClientRedirect(response, body)
+                ?? throw new InvalidOperationException(
+                    $"Password login did not redirect with an authorization code. Status {(int)response.StatusCode}: {body}");
+        }
+
+        var query = QueryHelpers.ParseQuery(location.IsAbsoluteUri ? location.Query : location.OriginalString);
+        var code = query["code"].ToString();
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            throw new InvalidOperationException($"Authorization redirect omitted code: {location}");
+        }
+
+        return code;
+    }
 
     /// <summary>
     /// Same as <see cref="SubmitPasswordLoginAsync"/>, but also captures the
@@ -383,18 +455,23 @@ public sealed class HostedAuthorizeTokenFixture : IAsyncDisposable
         string code,
         string codeVerifier,
         string? clientId = null,
-        string? redirectUri = null)
+        string? redirectUri = null,
+        string? resource = null)
     {
-        using var response = await Client.PostAsync(
-            "/sqlos/auth/token",
-            new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["grant_type"] = "authorization_code",
-                ["code"] = code,
-                ["client_id"] = clientId ?? ClientId,
-                ["redirect_uri"] = redirectUri ?? RedirectUri,
-                ["code_verifier"] = codeVerifier
-            }));
+        var form = new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
+            ["client_id"] = clientId ?? ClientId,
+            ["redirect_uri"] = redirectUri ?? RedirectUri,
+            ["code_verifier"] = codeVerifier
+        };
+        if (resource != null)
+        {
+            form["resource"] = resource;
+        }
+
+        using var response = await Client.PostAsync("/sqlos/auth/token", new FormUrlEncodedContent(form));
         var body = await response.Content.ReadAsStringAsync();
         if (response.StatusCode != HttpStatusCode.OK)
         {

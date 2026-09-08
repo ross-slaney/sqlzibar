@@ -42,9 +42,15 @@ Swagger UI is available at `http://localhost:5080/swagger`, and the generated sp
 
 If you already ran an older version of the sample, reset the Todo sample SQL database or persistent volume once before rerunning. Existing todos are **not** backfilled into the FGA graph.
 
-## Single-app quickstart
+## Multi-application configuration
 
-The Todo sample intentionally demonstrates advanced client setup for local web, CLI, MCP, CIMD, and DCR flows. A new one-app project can start smaller:
+`Program.cs` uses `ConfigureApplication("SqlOS Todo", ...)` with `Brand`, `Authorization`, and optional `Headless`. It seeds each client explicitly: `todo-web`, `example-aspnet`, `todo-cli`, `todo-local`, and `todo-mcp-local`. The Razor Pages app and CLI are runnable clients of the same identity host; AppHost launches Razor Pages and the CLI runs separately.
+
+Todo keeps its configurable resource audience (`http://localhost:5080/api/todos` by default), explicit resource metadata, and per-operation scope/FGA checks for `/api/todos` and `/api/me`. A declaration of `Api = "/api"` would derive a different audience, so it is intentionally not used here. The external MCP broker remains a client; this host does not serve MCP tools.
+
+## Start a single application
+
+For the full `UseSingleApplication` API/MCP experience, run the [Notes sample](../SqlOS.OneCall.Api/README.md). A new one-app host starts with:
 
 ```csharp
 builder.AddSqlOS<TodoSampleDbContext>(options =>
@@ -56,7 +62,7 @@ builder.AddSqlOS<TodoSampleDbContext>(options =>
 });
 ```
 
-That creates one first-party public PKCE application with `openid`, `profile`, `email`, and `offline_access` scopes, a `{Origin}/auth/callback` redirect URI, and open `all_organizations` application access. Add explicit clients later when you need CLI, MCP, or portable public-client demos.
+That creates one first-party public PKCE application with `openid`, `profile`, `email`, and `offline_access` scopes, a `{Origin}/auth/callback` redirect URI, and open `all_organizations` application access. When adding another owned client such as a CLI, migrate to `ConfigureApplication` and explicitly preserve the original client identity. A same-host MCP surface can already be declared in single-application mode.
 
 ## FGA model
 

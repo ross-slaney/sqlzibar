@@ -2,46 +2,24 @@ using SqlOS.AuthServer.Contracts;
 
 namespace SqlOS.AuthServer.Configuration;
 
-/// <summary>
-/// Configures the first-party client, redirect URI, scopes, credentials, and branding used by
-/// single-application hosting mode.
-/// </summary>
-public sealed class SqlOSSingleApplicationOptions
+/// <summary>Application hosting with a derived first-party public PKCE client.</summary>
+public sealed class SqlOSSingleApplicationOptions : SqlOSApplicationOptions
 {
-    /// <summary>Gets or sets the application display name.</summary>
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the absolute application origin used to derive the default redirect URI.
-    /// </summary>
-    public string? Origin { get; set; }
-
-    /// <summary>Gets or sets the OAuth client ID. When omitted, SqlOS derives it from <see cref="Name"/>.</summary>
+    /// <summary>Gets or sets the OAuth client ID. When omitted, SqlOS derives it from <see cref="SqlOSApplicationOptions.Name"/>.</summary>
     public string? ClientId { get; set; }
 
-    /// <summary>Gets or sets the access-token audience. When omitted, the client ID is used.</summary>
+    /// <summary>
+    /// Gets or sets the access-token audience of the first-party client. When omitted, SqlOS uses
+    /// <c>{Origin}{Api}</c> when <see cref="SqlOSApplicationOptions.Api"/> is set and the client ID otherwise.
+    /// </summary>
     public string? Audience { get; set; }
 
-    /// <summary>Gets or sets the callback path appended to <see cref="Origin"/>.</summary>
+    /// <summary>Gets or sets the callback path appended to <see cref="SqlOSApplicationOptions.Origin"/>.</summary>
     public string RedirectPath { get; set; } = "/auth/callback";
 
     /// <summary>Gets the explicit absolute redirect URIs allowed for the client.</summary>
     public List<string> RedirectUris { get; } = [];
 
-    /// <summary>Gets or sets the OAuth scopes allowed for the client.</summary>
-    public List<string> AllowedScopes { get; set; } = ["openid", "profile", "email", "offline_access"];
-
-    /// <summary>Gets or sets whether the hosted sign-in page allows password sign-up.</summary>
-    public bool EnablePasswordSignup { get; set; } = true;
-
-    /// <summary>Gets or sets the credential types enabled on the hosted sign-in page.</summary>
-    public List<string> EnabledCredentialTypes { get; set; } = ["password"];
-
-    /// <summary>Gets or sets whether the application name and credential settings configure the hosted sign-in page.</summary>
-    public bool ConfigureAuthPageBranding { get; set; } = true;
-
-    /// <summary>Gets or sets whether the application name configures transactional email branding.</summary>
-    public bool ConfigureEmailBranding { get; set; } = true;
 }
 
 public sealed class SqlOSAuthPageSeedOptions

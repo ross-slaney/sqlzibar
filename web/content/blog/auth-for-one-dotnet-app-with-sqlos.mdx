@@ -41,94 +41,43 @@ Install the package:
 dotnet add package SqlOS
 ```
 
-Your host registers the same `DbContext` your app already uses. This example seeds one browser client and turns on local password login for the first version:
+Your host uses the combined registration overload and describes its single application:
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
+using SqlOS;
 using SqlOS.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Configure ConnectionStrings:DefaultConnection.");
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
-
-builder.AddSqlOS<AppDbContext>(options =>
+builder.AddSqlOS<AppDbContext>(db => db.UseSqlServer(connectionString), options =>
 {
-    options.DashboardBasePath = "/sqlos";
-
-    options.AuthServer.Issuer = "https://app.example.com/sqlos/auth";
-    options.AuthServer.PublicOrigin = "https://app.example.com";
-    options.AuthServer.DefaultAudience = "https://app.example.com/api";
-    options.AuthServer.EnableLocalPasswordAuth = true;
-
-    options.AuthServer.SeedClient(client =>
+    options.UseSingleApplication("App", application =>
     {
-        client.ClientId = "app-web";
-        client.Name = "App Web";
-        client.Audience = "https://app.example.com/api";
-        client.RedirectUris = ["https://app.example.com/auth/callback"];
-        client.AllowedScopes =
-        [
-            "openid",
-            "profile",
-            "email",
-            "offline_access"
-        ];
-        client.ClientType = "public_pkce";
-        client.RequirePkce = true;
-        client.IsFirstParty = true;
+        application.Origin = "https://app.example.com";
+        application.ClientId = "app-web";
+        application.Api = "/api";
+        application.Brand(page => page.PrimaryColor = "#0f172a");
     });
 });
 
 var app = builder.Build();
-app.MapSqlOS();
 app.Run();
 ```
 
-That is enough to mount the hosted auth routes and the dashboard. For a newer app that wants one product declaration instead of explicit client fields, use the single-application helper:
-
-```csharp
-builder.AddSqlOS<AppDbContext>(options =>
-{
-    options.UseSingleApplication("Todo", app =>
-    {
-        app.Origin = "https://todo.example.com";
-        app.EnabledCredentialTypes = ["password", "email_otp"];
-    });
-});
-```
-
-Single-application mode expands into normal SqlOS client and AuthPage settings. It is still one OAuth client, one issuer, and one set of routes.
+SqlOS maps its routes at startup and derives the first-party PKCE client, callback, API audience, and protection. Your browser application uses its standard OIDC library with the registered callback, through either hosted AuthPage or headless UI. If this same process registers ASP.NET authentication, place `UseSqlOSSurfaceProtection()` after `UseAuthentication()` and before `UseAuthorization()`. See the [complete README browser example](https://github.com/ross-slaney/sqlos#one-application-sign-in-and-call-your-api).
 
 ## Wire the DbContext
 
-Your context implements the AuthServer and FGA interfaces, then calls `UseSqlOS` in `OnModelCreating`. Even if you do not use resource authorization on day one, this is the clean setup for the combined SqlOS runtime:
+Derive your context from `SqlOSDbContext<TContext>` and add your business entities:
 
 ```csharp
-using Microsoft.EntityFrameworkCore;
-using SqlOS.AuthServer.Interfaces;
-using SqlOS.Extensions;
-using SqlOS.Fga.Interfaces;
-using SqlOS.Fga.Models;
-
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
-    : DbContext(options), ISqlOSAuthServerDbContext, ISqlOSFgaDbContext
+    : SqlOSDbContext<AppDbContext>(options)
 {
     public DbSet<Project> Projects => Set<Project>();
-
-    public IQueryable<SqlOSFgaAccessibleResource> IsResourceAccessible(
-        string resourceId,
-        string subjectIds,
-        string permissionId)
-        => FromExpression(() =>
-            IsResourceAccessible(resourceId, subjectIds, permissionId));
-
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        base.OnModelCreating(modelBuilder);
-        modelBuilder.UseSqlOS(GetType());
-    }
 }
 ```
 
@@ -148,7 +97,7 @@ Use headless auth later if your product needs a fully custom login UI. The hoste
 
 ## What routes you get
 
-Calling `app.MapSqlOS()` mounts the auth and admin surface:
+`AddSqlOS` maps the auth and admin surfaces when the host starts:
 
 | Route | Purpose |
 | --- | --- |

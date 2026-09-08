@@ -39,7 +39,11 @@ Your UI draws the current view and submits user input. SqlOS still owns the save
 
 ## 1. Register the client and custom page
 
-Configure one public PKCE client, then tell SqlOS where RelayDesk renders authorization views:
+<Callout type="info" title="One app on one origin? This step is one line">
+  When SqlOS and your UI share an origin in the [standard one-app flow](/docs/authserver/single-application), skip the client and CORS setup below and add `app.Headless("/auth/authorize")` to `UseSingleApplication`. SqlOS seeds the PKCE client and forwards the same `request`, `view`, `email`, `pendingToken`, `mfaToken`, and `consentToken` parameters this guide uses. Continue from [step 2](#2-keep-the-browser-boundary-first-party).
+</Callout>
+
+RelayDesk keeps its identity host and product UI on different origins, so it declares the client and the custom page explicitly. Configure one public PKCE client, then tell SqlOS where RelayDesk renders authorization views:
 
 ```csharp
 using Microsoft.AspNetCore.WebUtilities;
@@ -94,7 +98,6 @@ builder.AddSqlOS<AppDbContext>(options =>
 
 var app = builder.Build();
 app.UseCors("relaydesk-auth");
-app.MapSqlOS();
 ```
 
 `BuildUiUrl` is the mode switch. When it exists, `/sqlos/auth/authorize` redirects browser interaction to your page. There is no separate dashboard toggle.
