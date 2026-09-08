@@ -11,7 +11,7 @@ section: quickstarts
   href="#complete-program"
   actionLabel="View the code"
 >
-  Install SqlOS 4.2.0, register one SQL Server or PostgreSQL `DbContext`, and describe one application in one `AddSqlOS` call. This is the standard SqlOS flow; FGA modeling and multi-application client registration can wait.
+  Install SqlOS 5.0.0, register one SQL Server or PostgreSQL `DbContext`, and describe one application in one `AddSqlOS` call. This is the standard SqlOS flow; FGA modeling and multi-application client registration can wait.
 </Banner>
 
 ## Goal
@@ -31,17 +31,13 @@ Start an ASP.NET Core application with:
 - EF Core 9;
 - an existing SQL Server or PostgreSQL database and a login allowed to create tables, indexes, and functions.
 
-SqlOS 4.2.0 targets `net9.0`; it is not compatible with a `net8.0` host.
+SqlOS 5.0.0 targets `net9.0`; it is not compatible with a `net8.0` host.
 
 ## Install
 
 ```bash
-dotnet add package SqlOS --version 4.2.0
+dotnet add package SqlOS --version 5.0.0
 ```
-
-<Callout type="info" title="Hosting API in the next release">
-  The application hosting additions shown here are part of [PR #363](https://github.com/ross-slaney/sqlos/pull/363). Until that release is published, run the examples from the PR branch. The published 4.2.0 package does not include these additions.
-</Callout>
 
 For a new project, store local values with user secrets:
 

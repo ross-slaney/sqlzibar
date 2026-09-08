@@ -5,10 +5,6 @@ order: 26
 section: authserver
 ---
 
-<Callout type="info" title="Hosting API in the next release">
-  The application hosting additions shown here are part of [PR #363](https://github.com/ross-slaney/sqlos/pull/363). Until that release is published, run the examples from the PR branch. The published 4.2.0 package does not include these additions.
-</Callout>
-
 `SqlOS.Mcp` hosts a [Model Context Protocol](https://modelcontextprotocol.io) server on the MCP surface you declare inside `UseSingleApplication` or `ConfigureApplication`. SqlOS owns the OAuth side (audience validation, protected-resource metadata, client onboarding for portable clients such as Codex, ChatGPT, Claude, and Cursor); the package registers the official MCP SDK server and maps it on the protected path. Application code contains no `AddMcpServer`, `MapMcp`, `RequireSqlOSAccessToken`, or hand-written metadata document.
 
 ## Install
