@@ -56,21 +56,16 @@ app.Run();
 
 The auth server, hosted sign-in pages, and dashboard are mapped by `AddSqlOS` at startup. `app.MapSqlOS()` is obsolete; calling it remains safe and idempotent and logs one warning.
 
-## Browser sign-in and middleware placement
+## How the surfaces are protected
 
-The client registration does not implement your browser callback. Use your framework's OIDC handler to start authorization, validate the callback, and establish the application's cookie. The [Notes sample](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api) includes a complete browser, API, and MCP journey.
+`AddSqlOS` installs the guard for the declared surfaces ahead of the application's pipeline. Every request under `Api` or `Mcp` carries a validated bearer token for that surface's audience before any of your middleware, branches, or endpoints run; otherwise it is answered with `401` and a Bearer challenge. Handlers read the result through `HttpContext.GetSqlOSValidatedToken()` and `HttpContext.User`. There is nothing to place or order, and a host that also registers ASP.NET authentication, authorization, CORS, or exception handling changes nothing about this.
 
-Bearer-only hosts get an automatic early surface guard. When ASP.NET authentication is registered, place the guard explicitly; otherwise startup fails with guidance:
+Two details:
 
-```csharp
-app.UseRouting();
-// app.UseCors("frontend"); // after configuring that CORS policy
-app.UseAuthentication();
-app.UseSqlOSSurfaceProtection();
-app.UseAuthorization();
-```
+- A CORS preflight carries no credentials. When the host has registered CORS, the preflight is passed to your `UseCors` and the request that follows is validated like any other. Without CORS services, an `OPTIONS` request under a surface is challenged like everything else.
+- Surfaces match the path as the server receives it. If your application calls `UsePathBase` or rewrites paths into a surface, declare the paths clients actually request, or protect those routes with `RequireSqlOSAccessToken` instead.
 
-Put exception handling, `UsePathBase`, and rewriting before routing and the guard; put protected middleware branches after it. Configure paths relative to `PathBase`; the audience remains the configured `{Origin}{Api}` or `{Origin}{Mcp}`. A configured CORS policy may answer preflight, but an arbitrary `OPTIONS` request is not exempt. The bearer identity replaces the cookie identity within a protected surface; authorization policies should use that current principal.
+The derived client is a public PKCE client for whatever front end you build: a browser SPA, a native app, or an agent. It completes the authorization-code flow with its standard OIDC library, requests `resource={Origin}/api`, and sends the token as a bearer. Add a native app's custom-scheme or loopback callback to `RedirectUris`, and set `AllowNativeHeadlessAuth = true` if it drives the [headless authentication API](/docs/authserver/headless-auth) directly. The [Notes sample](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api) is a complete bearer-only host with API and MCP.
 
 ## Hosted or headless
 
@@ -134,7 +129,7 @@ builder.AddSqlOS<AppDbContext>(options =>
 });
 ```
 
-`Origin` must be an absolute `http` or `https` origin without a query string or fragment. `RedirectPath` must start with `/`. You can also provide `RedirectUris` directly when an origin-derived callback is not enough.
+`Origin` must be an absolute `http` or `https` origin without a query string or fragment. `RedirectPath` must start with `/`. `RedirectUris` adds callbacks next to `{Origin}{RedirectPath}`; any absolute URI without a fragment is accepted, including `com.example.todo:/callback` for a native app. `AllowNativeHeadlessAuth` lets a native app use the headless authentication API with this client.
 
 ## Configuration
 

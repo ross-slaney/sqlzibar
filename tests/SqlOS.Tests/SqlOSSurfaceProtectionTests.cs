@@ -1,8 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Security.Claims;
 using FluentAssertions;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
@@ -19,55 +17,32 @@ using SqlOS.Tests.Infrastructure;
 
 namespace SqlOS.Tests;
 
+/// <summary>
+/// Declaring <c>Api</c>/<c>Mcp</c> is the only thing an application does. No test here calls a
+/// placement method, orders middleware for SqlOS, or handles a startup exception about it.
+/// </summary>
 [TestClass]
 public sealed class SqlOSSurfaceProtectionTests
 {
     private const string Origin = SingleApplicationTestHost.Origin;
 
     [TestMethod]
-    public async Task ConventionalHost_CanPlaceProtectionWithAuthentication()
-    {
-        var databaseName = Guid.NewGuid().ToString("N");
-        using var server = new TestServer(new WebHostBuilder().UseEnvironment("Development")
-            .ConfigureServices(services =>
-            {
-                services.AddLogging();
-                services.AddDbContext<TestSqlOSInMemoryDbContext>(db => db.UseInMemoryDatabase(databaseName));
-                services.AddSqlOS<TestSqlOSInMemoryDbContext>(Configure);
-                services.RemoveAll<IHostedService>();
-                services.AddAuthentication("cookie").AddCookie("cookie");
-                services.AddAuthorization();
-            })
-            .Configure(app =>
-            {
-                app.UseRouting();
-                app.UseAuthentication();
-                app.UseSqlOSSurfaceProtection();
-                app.UseAuthorization();
-                app.Map("/api/legacy", branch => branch.Run(http => http.Response.WriteAsync("private")));
-                app.UseEndpoints(endpoints => endpoints.MapGet("/public", () => "public"));
-            }));
-        using var client = server.CreateClient();
-        (await client.GetAsync("/api/legacy")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await client.GetAsync("/public")).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await client.GetAsync("/sqlos/auth/.well-known/openid-configuration")).StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [TestMethod]
-    public async Task BranchPlacement_CannotDisableRootProtection()
+    public async Task Guard_ProtectsMiddlewareBranchesAndUnknownPaths_AndExposesIdentityToHandlers()
     {
         await using var host = await SingleApplicationTestHost.StartAsync(Configure, app =>
         {
-            app.Map("/public", branch =>
-            {
-                var place = () => branch.UseSqlOSSurfaceProtection();
-                place.Should().Throw<InvalidOperationException>().WithMessage("*root application*");
-                branch.Run(http => http.Response.WriteAsync("public"));
-            });
-            app.Map("/api/legacy", branch => branch.Run(http => http.Response.WriteAsync("private")));
+            app.Map("/api/legacy", branch => branch.Run(context =>
+                context.Response.WriteAsync(context.User.Identity!.IsAuthenticated.ToString())));
+            app.MapGet("/apiary", () => "public");
         });
         (await host.Client.GetAsync("/api/legacy")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await host.Client.GetAsync("/public")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await host.Client.GetAsync("/api/unknown")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await host.Client.GetAsync("/API/legacy")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await host.Client.GetAsync("/apiary")).StatusCode.Should().Be(HttpStatusCode.OK);
+        var token = await host.MintAccessTokenAsync(Origin + "/api");
+        var response = await Send(host, "/api/legacy", token);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).Should().Be("True");
     }
 
     [DataTestMethod]
@@ -89,79 +64,73 @@ public sealed class SqlOSSurfaceProtectionTests
     }
 
     [TestMethod]
-    public async Task AutomaticGuard_ProtectsMiddlewareAndUnknownPaths_AndExposesIdentityEarly()
+    public async Task Challenge_NamesRealmAndResourceMetadata()
     {
-        await using var host = await SingleApplicationTestHost.StartAsync(Configure, app =>
-        {
-            app.Map("/api/legacy", branch => branch.Run(context =>
-                context.Response.WriteAsync(context.User.Identity!.IsAuthenticated.ToString())));
-            app.MapGet("/apiary", () => "public");
-        });
-        (await host.Client.GetAsync("/api/legacy")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await host.Client.GetAsync("/api/unknown")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await host.Client.GetAsync("/API/legacy")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await host.Client.GetAsync("/apiary")).StatusCode.Should().Be(HttpStatusCode.OK);
-        var token = await host.MintAccessTokenAsync(Origin + "/api");
-        var response = await Send(host, "/api/legacy", token);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await response.Content.ReadAsStringAsync()).Should().Be("True");
+        await using var host = await SingleApplicationTestHost.StartAsync(Configure, app => app.MapGet("/api/me", () => "private"));
+        var response = await host.Client.GetAsync("/api/me");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var challenge = response.Headers.WwwAuthenticate.ToString();
+        challenge.Should().Contain("realm=\"Review API\"");
+        challenge.Should().Contain($"resource_metadata=\"{Origin}/.well-known/oauth-protected-resource\"");
     }
 
     [TestMethod]
-    public async Task AuthenticationWithoutExplicitPlacement_FailsAtStartupWithActionableMessage()
+    public async Task HostWithAspNetAuthentication_NeedsNothingExtra()
     {
-        var start = () => SingleApplicationTestHost.StartAsync(Configure,
-            configureServices: services => services.AddAuthentication("cookie").AddCookie("cookie"));
-        await start.Should().ThrowAsync<InvalidOperationException>().WithMessage("*UseAuthentication*UseSqlOSSurfaceProtection*UseAuthorization*");
-    }
-
-    [TestMethod]
-    public async Task ExplicitGuard_BearerIdentityWinsOverCookie_AndStandardAuthorizationWorks()
-    {
+        // The host registers its own authentication and authorization and adds nothing for SqlOS.
         await using var host = await SingleApplicationTestHost.StartAsync(Configure, app =>
         {
-            app.UseAuthentication();
-            app.UseSqlOSSurfaceProtection();
-            app.UseSqlOSSurfaceProtection(); // One placement, no duplicated work.
-            app.UseAuthorization();
-            app.MapGet("/cookie", async (HttpContext http) =>
-            {
-                await http.SignInAsync("cookie", new ClaimsPrincipal(new ClaimsIdentity(
-                    [new Claim("sub", "cookie-user")], "cookie")));
-                return Results.Ok();
-            });
-            app.MapGet("/public/me", (HttpContext http) => http.User.FindFirst("sub")?.Value).RequireAuthorization();
-            app.MapGet("/api/me", (HttpContext http) => new
-            {
-                subject = http.User.FindFirst("sub")?.Value,
-                tokenSubject = http.GetSqlOSValidatedToken()!.UserId
-            }).RequireAuthorization();
+            app.MapGet("/api/me", (HttpContext http) => http.GetSqlOSValidatedToken()!.UserId).RequireAuthorization();
+            app.MapGet("/public", () => "public");
         }, configureServices: services =>
         {
             services.AddAuthentication("cookie").AddCookie("cookie");
             services.AddAuthorization();
         });
-        var cookie = (await host.Client.GetAsync("/cookie")).Headers.GetValues("Set-Cookie").Single().Split(';')[0];
-        host.Client.DefaultRequestHeaders.Add("Cookie", cookie);
-        (await host.Client.GetStringAsync("/public/me")).Should().Be("cookie-user");
-        (await host.Client.GetAsync("/api/me")).StatusCode.Should().Be(HttpStatusCode.Unauthorized, "a cookie is not an API bearer token");
+        (await host.Client.GetAsync("/public")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await host.Client.GetAsync("/api/me")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         var token = await host.MintAccessTokenAsync(Origin + "/api");
         var response = await Send(host, "/api/me", token);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        body.GetProperty("subject").GetString().Should().Be(body.GetProperty("tokenSubject").GetString()).And.NotBe("cookie-user");
+        (await response.Content.ReadAsStringAsync()).Should().StartWith("usr_");
+    }
+
+    [TestMethod]
+    public async Task ConventionalStartupHost_IsProtectedWithoutPlacement()
+    {
+        var databaseName = Guid.NewGuid().ToString("N");
+        using var server = new TestServer(new WebHostBuilder().UseEnvironment("Development")
+            .ConfigureServices(services =>
+            {
+                services.AddLogging();
+                services.AddDbContext<TestSqlOSInMemoryDbContext>(db => db.UseInMemoryDatabase(databaseName));
+                services.AddSqlOS<TestSqlOSInMemoryDbContext>(Configure);
+                services.RemoveAll<IHostedService>();
+                services.AddAuthentication("cookie").AddCookie("cookie");
+                services.AddAuthorization();
+            })
+            .Configure(app =>
+            {
+                app.UseRouting();
+                app.UseAuthentication();
+                app.UseAuthorization();
+                app.Map("/api/legacy", branch => branch.Run(http => http.Response.WriteAsync("private")));
+                app.UseEndpoints(endpoints => endpoints.MapGet("/public", () => "public"));
+            }));
+        using var client = server.CreateClient();
+        (await client.GetAsync("/api/legacy")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await client.GetAsync("/public")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await client.GetAsync("/sqlos/auth/.well-known/openid-configuration")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [DataTestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task ExplicitGuard_ComposesWithNamedAndEndpointCorsPolicies(bool endpointPolicy)
+    public async Task CorsPreflight_IsAnsweredByHostCors_AndTheActualRequestIsStillValidated(bool endpointPolicy)
     {
         await using var host = await SingleApplicationTestHost.StartAsync(Configure, app =>
         {
-            app.UseRouting();
             if (endpointPolicy) app.UseCors(); else app.UseCors("browser");
-            app.UseSqlOSSurfaceProtection();
             var route = app.MapGet("/api/me", () => "private");
             if (endpointPolicy) route.RequireCors("browser");
         }, configureServices: services => services.AddCors(cors => cors.AddPolicy("browser", policy =>
@@ -175,14 +144,13 @@ public sealed class SqlOSSurfaceProtectionTests
         cors.Headers.GetValues("Access-Control-Allow-Origin").Should().ContainSingle().Which.Should().Be("https://browser.example");
         using var get = new HttpRequestMessage(HttpMethod.Get, "/api/me");
         get.Headers.Add("Origin", "https://browser.example");
-        var denied = await host.Client.SendAsync(get);
-        denied.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        denied.Headers.GetValues("Access-Control-Allow-Origin").Should().Contain("https://browser.example");
-        denied.Headers.WwwAuthenticate.ToString().Should().Contain("resource_metadata");
+        (await host.Client.SendAsync(get)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var token = await host.MintAccessTokenAsync(Origin + "/api");
+        (await Send(host, "/api/me", token)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [TestMethod]
-    public async Task PreflightShapeWithoutCorsPolicy_DoesNotBypassProtection()
+    public async Task PreflightShape_WithoutCorsRegistered_IsChallenged()
     {
         await using var host = await SingleApplicationTestHost.StartAsync(Configure, app =>
             app.MapMethods("/api/options", ["OPTIONS"], () => "private"));
@@ -193,48 +161,12 @@ public sealed class SqlOSSurfaceProtectionTests
     }
 
     [TestMethod]
-    public async Task ExplicitGuard_RunsAfterRewriteAndInsideExceptionHandler()
+    public async Task NoSurfaceDeclared_InstallsNoGuard()
     {
-        await using var host = await SingleApplicationTestHost.StartAsync(Configure, app =>
-        {
-            app.Use(async (context, next) =>
-            {
-                try { await next(context); }
-                catch (InvalidOperationException) { context.Response.StatusCode = 503; }
-            });
-            app.Use(async (context, next) =>
-            {
-                if (context.Request.Path == "/alias") context.Request.Path = "/api/legacy";
-                await next(context);
-            });
-            app.UseRouting();
-            app.UseSqlOSSurfaceProtection();
-            app.Map("/api/legacy", branch => branch.Run(_ => throw new InvalidOperationException("sample failure")));
-        });
-        (await host.Client.GetAsync("/alias")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        var token = await host.MintAccessTokenAsync(Origin + "/api");
-        (await Send(host, "/alias", token)).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
-    }
-
-    [TestMethod]
-    public async Task ExplicitGuard_PathBaseProtectsMountedAndUnmountedRoutes()
-    {
-        await using var host = await SingleApplicationTestHost.StartAsync(options => options.UseSingleApplication("Review", app =>
-        {
-            app.Origin = Origin;
-            app.Api = "/api";
-        }), app =>
-        {
-            app.UsePathBase("/tenant");
-            app.UseRouting();
-            app.UseSqlOSSurfaceProtection();
-            app.MapGet("/api/me", () => "protected");
-        });
-        (await host.Client.GetAsync("/tenant/api/me")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await host.Client.GetAsync("/api/me")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        var token = await host.MintAccessTokenAsync(Origin + "/api");
-        (await Send(host, "/tenant/api/me", token)).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await Send(host, "/api/me", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+        await using var host = await SingleApplicationTestHost.StartAsync(
+            options => options.UseSingleApplication("Review", app => app.Origin = Origin),
+            app => app.MapGet("/api/me", () => "open"));
+        (await host.Client.GetAsync("/api/me")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     private static void Configure(SqlOSOptions options) => options.UseSingleApplication("Review", app =>

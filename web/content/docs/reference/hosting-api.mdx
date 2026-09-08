@@ -161,11 +161,11 @@ Single-application mode creates one first-party public PKCE client and applies A
 | `Headless(string uiPath, Action<SqlOSHeadlessAuthOptions>? configure = null)` | method | Uses your own sign-in UI at `{Origin}{uiPath}` instead of the hosted pages. Forwards to `AuthServer.UseHeadlessAuthPage` with a generated `BuildUiUrl` that passes `request`, `view`, `error`, `email`, `displayName`, `pendingToken`, `mfaToken`, `consentToken`, and `ui_context`. Requires `Origin`; `uiPath` must start with `/`. |
 | `Headless(Action<SqlOSHeadlessAuthOptions>)` | method | Forwards to `AuthServer.UseHeadlessAuthPage` unchanged; set `BuildUiUrl` yourself. |
 | `Authorization(Action<SqlOSFgaSeedBuilder>)` | method | Forwards to `Fga.Seed`. |
-| `Audience`, `ClientId`, `RedirectPath`, `RedirectUris`, `AllowedScopes` | | Client overrides. `Audience` defaults to `{Origin}{Api}` when `Api` is set. |
+| `Audience`, `ClientId`, `RedirectPath`, `RedirectUris`, `AllowedScopes`, `AllowNativeHeadlessAuth` | | Client overrides. `Audience` defaults to `{Origin}{Api}` when `Api` is set. `RedirectUris` accepts any absolute URI without a fragment, including native custom-scheme callbacks. |
 
 Declared surfaces are validated at startup: paths must be absolute, non-root, distinct and non-nested, and must not overlap `/.well-known`, the auth base path, or `DashboardBasePath`. `Audience` must equal `{Origin}{Api}` when both are set, and CIMD/resource indicators cannot be disabled after an `Mcp` surface is declared.
 
-Requests under a declared surface that carry no token or a token for another audience receive HTTP `401` with a Bearer challenge that names the surface's `realm` and `resource_metadata` URL. The validated token is available through `HttpContext.GetSqlOSValidatedToken()`; `RequireSqlOSAccessToken` on a nested group reuses it and only adds scope enforcement.
+`AddSqlOS` installs the guard for declared surfaces ahead of the application's pipeline; nothing is placed by application code. Requests under a declared surface that carry no token or a token for another audience receive HTTP `401` with a Bearer challenge that names the surface's `realm` and `resource_metadata` URL, before any application middleware, branch, or endpoint runs. The validated token is available through `HttpContext.GetSqlOSValidatedToken()` and `HttpContext.User`; `RequireSqlOSAccessToken` on a nested group reuses it and only adds scope enforcement. A CORS preflight is passed to the host's `UseCors` when CORS services are registered; otherwise `OPTIONS` is challenged like any other request. Surfaces match the request path as received, so declare the paths clients request if the application applies `UsePathBase` or rewrites.
 
 ### Exceptions
 
@@ -182,21 +182,6 @@ public SqlOSOptions ConfigureApplication(string name, Action<SqlOSApplicationOpt
 Describes the host independently of client registration. `SqlOSApplicationOptions` contains the shared origin, API/MCP surfaces, branding, headless UI, scopes, credential presentation, and authorization seed methods shown above. `SqlOSSingleApplicationOptions` derives from it and adds `ClientId`, `Audience`, `RedirectPath`, and `RedirectUris` for the derived first-party client.
 
 `ConfigureApplication` seeds no client. Use explicit client seeds, the administration API, or dashboard records. Declaring MCP still enables CIMD and resource indicators. The [multiple-applications guide](/docs/authserver/multiple-applications) shows how to preserve an existing client's identity when graduating.
-
-## UseSqlOSSurfaceProtection
-
-**Namespace:** `SqlOS.Extensions`
-
-Places the declared API/MCP guard in the root application pipeline. Call after exception handling, rewriting, `UsePathBase`, routing, CORS, and authentication, and before authorization or any middleware that serves protected content. Surface paths are application-relative after `UsePathBase`. Repeated calls are idempotent; placing the guard inside a branch is rejected.
-
-```csharp
-app.UseRouting();
-app.UseAuthentication();
-app.UseSqlOSSurfaceProtection();
-app.UseAuthorization();
-```
-
-Without explicit placement, a bearer-only host gets an early guard before application middleware. Hosts registering ASP.NET authentication must place it explicitly or startup fails: cookie authentication must run before the surface's bearer identity is established. Policies inside the surface should use the current principal, not select a different authentication scheme. Configured CORS may answer preflights before the guard; `OPTIONS` alone does not bypass it.
 
 ## Endpoint mapping
 
