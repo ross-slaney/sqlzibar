@@ -29,7 +29,7 @@ Declaring the surface makes SqlOS:
   SDK builder unchanged, and map it on the protected branch at startup,
 - record a SqlOS audit event per tool call (tool name, subject, client, outcome; never arguments or tokens).
 
-With ASP.NET authentication, place `app.UseSqlOSSurfaceProtection()` after `UseAuthentication()` and before `UseAuthorization()` or protected handlers. Put CORS and rewriting before the guard too. Bearer-only hosts get an automatic early guard. `ConfigureApplication` retains this hosting setup while you register multiple clients explicitly.
+`AddSqlOS` installs the guard ahead of the application's pipeline; nothing is placed or ordered by application code. `ConfigureApplication` retains this hosting setup while you register multiple clients explicitly.
 
 Tools can inject `ISqlOSMcpUserContext` to act as the connecting user without touching the raw token. Tools must still call application services that enforce permissions; hosting and authentication do not grant access to application data.
 

@@ -32,11 +32,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : SqlOS
   },
   {
     name: "README additional API scope", relativePath: "README.md",
-    heading: "### API protection and middleware ordering", marker: "app.MapGroup",
+    heading: "### How the surfaces are protected", marker: "app.MapGroup",
     wrap: (snippet) => `using SqlOS.AuthServer.Extensions;
 using SqlOS.Extensions;
 var app = WebApplication.CreateBuilder(args).Build();
-const string origin = "https://acme.example.com";
 ${snippet}`,
   },
   ...[
@@ -489,6 +488,7 @@ try {
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="9.0.0" />
     <ProjectReference Include="${sourceProject}" />
     <ProjectReference Include="${path.join(repoRoot, "examples", "SqlOS.OneCall.Api", "SqlOS.OneCall.Api.csproj")}" />
   </ItemGroup>

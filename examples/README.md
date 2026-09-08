@@ -21,7 +21,7 @@ Start with the [Notes sample](SqlOS.OneCall.Api/README.md) for `UseSingleApplica
 
 | Host | Application configuration | Why |
 | --- | --- | --- |
-| [Notes](SqlOS.OneCall.Api/NotesApplication.cs) | `UseSingleApplication`, `Api`, `Mcp`, `Brand`, `Authorization` | One derived browser client and API/MCP surfaces in the same process |
+| [Notes](SqlOS.OneCall.Api/NotesApplication.cs) | `UseSingleApplication`, `Api`, `Mcp`, `Brand`, `Authorization` | One derived first-party client (browser, native, or agent) and API/MCP surfaces in one bearer-only host |
 | [Retail](SqlOS.Example.Api/Program.cs) | `ConfigureApplication`, `Brand`, `Headless`, `Authorization` | Explicit Next.js, Angular, and Expo clients share one identity host |
 | [Todo](SqlOS.Todo.Api/Program.cs) | `ConfigureApplication`, `Brand`, optional `Headless`, `Authorization` | Explicit hosted-web, Razor Pages, CLI, and broker clients share the Todo resource |
 | [App X](SqlOS.SignInWithX.AppX/Program.cs) | `ConfigureApplication`, `Brand` | Dedicated OIDC provider with an explicit third-party App Y client; no local business API |
