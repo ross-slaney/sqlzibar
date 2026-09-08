@@ -20,6 +20,10 @@ It keeps the model intentionally small:
 - portable public-client onboarding with CIMD and optional DCR;
 - optional email OTP and SMS OTP when you deliberately configure providers.
 
+## Application configuration
+
+This is a multi-client host. `Program.cs` uses `ConfigureApplication("SqlOS Todo", ...)` with `Brand`, `Authorization`, and optional `Headless`, then explicitly registers its web, Razor Pages, CLI, and broker clients. It keeps the configurable Todo resource audience and per-operation token/scope checks. It does not declare a same-host MCP server. The [Notes sample](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api) demonstrates `UseSingleApplication` with derived API/MCP protection.
+
 ## Run the provider-free sample
 
 From the repository root:

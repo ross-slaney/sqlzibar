@@ -52,68 +52,83 @@ By the end of this guide you will have:
 
 ## 1. Configure the auth host
 
-Register SqlOS in the ASP.NET host that will act as the identity server.
+This complete host describes the application once and registers its clients explicitly. Supply the connection string and dashboard password through the host's configuration or secret store.
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
+using SqlOS;
+using SqlOS.Configuration;
 using SqlOS.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Configure ConnectionStrings:DefaultConnection.");
+var dashboardPassword = builder.Configuration["SqlOS:Dashboard:Password"]
+    ?? throw new InvalidOperationException("Configure SqlOS:Dashboard:Password.");
+const string identityOrigin = "https://auth.example.com";
+const string apiAudience = "https://api.example.com";
 
-builder.Services.AddDbContext<ExampleAppDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
-
-builder.AddSqlOS<ExampleAppDbContext>(options =>
+builder.AddSqlOS<ExampleAppDbContext>(db => db.UseSqlServer(connectionString), options =>
 {
-    options.DashboardBasePath = "/sqlos";
+    options.ConfigureApplication("Acme Identity", application =>
+    {
+        application.Origin = identityOrigin;
+        application.Brand(page => page.PrimaryColor = "#0f172a");
+    });
+    options.Dashboard.AuthMode = SqlOSDashboardAuthMode.Password;
+    options.Dashboard.Password = dashboardPassword;
 
     var auth = options.AuthServer;
-    auth.Issuer = "https://auth.example.com/sqlos/auth";
-    auth.PublicOrigin = "https://auth.example.com";
-    auth.DefaultAudience = "https://api.example.com";
+    auth.PublicOrigin = identityOrigin;
+    auth.Issuer = identityOrigin + "/sqlos/auth";
+    auth.DefaultAudience = apiAudience;
+
+    foreach (var (id, name, redirect) in new[]
+    {
+        ("customer-portal", "Customer Portal", "https://app.example.com/auth/callback"),
+        ("admin-console", "Admin Console", "https://admin.example.com/auth/callback"),
+        ("mobile-app", "Mobile App", "sqlos-mobile://auth-callback")
+    })
+    {
+        auth.SeedClient(client =>
+        {
+            client.ClientId = id;
+            client.Name = name;
+            client.RedirectUris = [redirect];
+            client.Audience = apiAudience;
+            client.AllowedScopes = ["openid", "profile", "email", "offline_access"];
+            client.ClientType = "public_pkce";
+            client.RequirePkce = true;
+            client.IsFirstParty = true;
+        });
+    }
+    auth.SeedCliClient("support-cli", "Support CLI", apiAudience,
+        "openid", "profile", "email", "offline_access");
 });
 
 var app = builder.Build();
 app.Run();
+
+public sealed class ExampleAppDbContext(DbContextOptions<ExampleAppDbContext> options)
+    : SqlOSDbContext<ExampleAppDbContext>(options);
 ```
 
-The public issuer must be stable. Resource APIs validate tokens against this issuer.
+`ConfigureApplication` seeds no client. `Brand`, `Headless`, and `Authorization` use the same settings and reconciliation as the single-application API. This dedicated host has no local business API, so it does not declare `Api`. Each separate resource API validates its own audience.
+
+The public issuer must be stable. Each browser application configures its standard OIDC library with `https://auth.example.com/sqlos/auth` as the authority and the exact registered callback. Hosted AuthPage and headless UI use the same authorization-code flow.
 
 ## 2. Register each client
 
-Give every app surface its own client ID and redirect URI.
+The complete program above registers these applications:
 
-```csharp
-builder.AddSqlOS<ExampleAppDbContext>(options =>
-{
-    var auth = options.AuthServer;
+| Client | Callback or grant | Audience |
+| --- | --- | --- |
+| `customer-portal` | `https://app.example.com/auth/callback` | `https://api.example.com` |
+| `admin-console` | `https://admin.example.com/auth/callback` | `https://api.example.com` |
+| `mobile-app` | `sqlos-mobile://auth-callback` | `https://api.example.com` |
+| `support-cli` | Device authorization | `https://api.example.com` |
 
-    auth.SeedBrowserClient(
-        "customer-portal",
-        "Customer Portal",
-        "https://app.example.com/auth/callback");
-
-    auth.SeedBrowserClient(
-        "admin-console",
-        "Admin Console",
-        "https://admin.example.com/auth/callback");
-
-    auth.SeedBrowserClient(
-        "mobile-app",
-        "Mobile App",
-        "sqlos-mobile://auth-callback");
-
-    auth.SeedCliClient(
-        "support-cli",
-        "Support CLI",
-        "https://api.example.com",
-        "openid",
-        "profile",
-        "email",
-        "offline_access");
-});
-```
+Add registrations inside the existing `AddSqlOS` callback, or use the dashboard/admin API with separate operator-owned records. Startup reconciliation preserves ownership. Use `IsFirstParty = false` for a partner application that should request consent, and resolve confidential-client secrets through the host's secret mechanism. The [multiple-applications guide](/docs/authserver/multiple-applications) links runnable retail, Todo, and standalone-provider examples.
 
 <Callout type="info" title="Client and audience are different">
   Client IDs identify the app asking for login. Audience identifies the resource API that should accept the access token. Two clients can use the same audience and still have different application access policy.
@@ -123,10 +138,10 @@ builder.AddSqlOS<ExampleAppDbContext>(options =>
 
 Use hosted AuthPage when a shared login page is acceptable.
 
-Use headless when each frontend should own the login UI while SqlOS owns OAuth state.
+Use headless when your frontend should own the login UI while SqlOS owns OAuth state. Add this inside the `ConfigureApplication` callback above; the callback form supports a UI on a different origin.
 
 ```csharp
-auth.UseHeadlessAuthPage(headless =>
+application.Headless(headless =>
 {
     headless.BuildUiUrl = ctx =>
         QueryHelpers.AddQueryString(
@@ -147,7 +162,7 @@ See [Headless Auth](/docs/authserver/headless-auth) and [Hosted vs Headless](/do
 
 ## 4. Configure application access
 
-For reproducible deployments, set `AccessMode` and stable keyed assignments directly on `SeedClient`. Referenced organizations and principals must already exist. The dashboard/API workflow below is the operator-owned alternative and remains useful for runtime exceptions.
+For reproducible deployments, set `AccessMode` and stable keyed assignments on the existing `SeedClient` registration. The fragment below shows the access fields to add; do not register the same client twice. Referenced organizations and principals must already exist. The dashboard/API workflow below is the operator-owned alternative and remains useful for runtime exceptions.
 
 ```csharp
 auth.SeedClient(client =>
@@ -198,11 +213,23 @@ These routes require the standalone host's operator authentication. The cookie-j
 Resource APIs should validate issuer, signature, expiry, and audience. They should not rely on application access checks alone.
 
 ```csharp
-app.UseSqlOSAccessTokenValidation(options =>
+builder.Services.AddAuthentication("Bearer").AddJwtBearer("Bearer", options =>
 {
-    options.ExpectedAudience = "https://api.example.com";
+    options.Authority = "https://auth.example.com/sqlos/auth";
+    options.Audience = "https://api.example.com";
+    options.MapInboundClaims = false;
 });
+builder.Services.AddAuthorization();
+
+var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapGet("/me", (HttpContext http) => new { userId = http.User.FindFirst("sub")?.Value })
+    .RequireAuthorization();
+app.Run();
 ```
+
+This separate API uses `Microsoft.AspNetCore.Authentication.JwtBearer` and validates signature, issuer, expiry, and audience through discovery/JWKS. It does not query SqlOS session state on each request. In a process that hosts SqlOS, declared `Api`/`Mcp` surfaces and `UseSqlOSAccessTokenValidation` additionally validate the persisted session through SqlOS services; see [token validation](/docs/authserver/token-validation).
 
 Use FGA or app policy after token validation when the API needs row-level or resource-level authorization.
 

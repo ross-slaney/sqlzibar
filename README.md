@@ -506,6 +506,8 @@ Run this as an explicit setup operation for an existing organization, not on eve
 
 **Outbound SCIM provisioning is not implemented.** SqlOS can be the central OIDC provider for your applications and receive enterprise-directory provisioning, but it does not push accounts to downstream SaaS services over SCIM. That requires a separate provisioning integration. See [SCIM directory sync](https://sqlos.dev/docs/authserver/scim-directory-sync) for connection lifecycle, rotation, group mapping, and protocol examples.
 
+For runnable multi-client setups, the [retail AppHost](examples/SqlOS.Example.AppHost/README.md) runs one `ConfigureApplication` host with Next.js and Angular clients (Expo connects separately). The [Todo AppHost](examples/SqlOS.Todo.Api/README.md) runs the host and Razor Pages client, with a CLI available separately. [Sign in with X](examples/SqlOS.SignInWithX.AppHost/README.md) demonstrates a dedicated provider and a third-party Auth.js relying party.
+
 ### Growing an existing single application
 
 Replace `UseSingleApplication` with `ConfigureApplication`, keeping the same host block, API/MCP paths, issuer, origin, branding, and permission keys. Remove the single-client-only properties from that block and explicitly seed the existing client with its **same client ID, audience, redirect URIs, scopes, PKCE, and first-party settings**. Then add the second client.

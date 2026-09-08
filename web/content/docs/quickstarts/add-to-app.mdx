@@ -39,8 +39,8 @@ SqlOS 4.2.0 targets `net9.0`; it is not compatible with a `net8.0` host.
 dotnet add package SqlOS --version 4.2.0
 ```
 
-<Callout type="warning" title="Use the matching package version">
-  The `4.2.0` package is the version contract for this guide. If NuGet does not list it yet, run the source examples from this repository or wait for the release; older packages may not contain the schema and APIs documented here.
+<Callout type="info" title="Hosting API in the next release">
+  The application hosting additions shown here are part of [PR #363](https://github.com/ross-slaney/sqlos/pull/363). Until that release is published, run the examples from the PR branch. The published 4.2.0 package does not include these additions.
 </Callout>
 
 For a new project, store local values with user secrets:

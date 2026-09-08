@@ -77,21 +77,27 @@ builder.AddSqlOS<ExampleAppDbContext>(
             builder.Configuration["SqlOS:Issuer"]
             ?? "https://localhost/sqlos/auth";
 
+        options.ConfigureApplication("SqlOS Example", application =>
+        {
+            application.Origin = "http://localhost:5062";
+            application.Brand(page => page.PrimaryColor = "#2563eb");
+            application.Authorization(seed =>
+            {
+                // Resource types, permissions, roles, and role mappings.
+            });
+        });
+
         options.AuthServer.SeedBrowserClient(
             "example-angular",
             "Example Angular Client",
             "http://localhost:4200/auth/callback");
 
-        options.Fga.Seed(seed =>
-        {
-            // Resource types, permissions, roles, and role mappings.
-        });
     });
 ```
 
-The actual project also configures hosted/headless AuthPage behavior, email and phone OTP, MFA, client registrations, optional Microsoft OIDC, auth email branding, workspace FGA, and a signup hook. Read the surrounding source rather than copying one concern blindly.
+The application block uses `Brand`, `Headless`, and `Authorization`; `ConfigureApplication` seeds no client. Next.js, Angular, and Expo are registered explicitly against the same host. The actual project also configures hosted/headless AuthPage behavior, email and phone OTP, MFA, client registrations, optional Microsoft OIDC, auth email branding, workspace FGA, and a signup hook. Read the surrounding source rather than copying one concern blindly.
 
-### 3. Map SqlOS before application endpoints
+### 3. Map application endpoints
 
 ```csharp
 var app = builder.Build();
@@ -136,6 +142,8 @@ The Expo sample uses `example-expo`. Keep `sqlos-expo://auth-callback` registere
 Redirect URIs are exact security boundaries. Changing a client port or callback path requires changing both the client and seed configuration.
 
 The [ASP.NET Core Razor Pages client](../SqlOS.Example.AspNetCoreWeb/README.md) is registered by and requests the protected resource from the Todo API at `http://localhost:5080`. It runs in the full AppHost, but it is intentionally not a client of this broad example API.
+
+The host deliberately leaves `application.Api` unset: the retail demo accepts bearer tokens plus sample-only service-account and agent identities, and has public `/api/v1/auth/*` and `/api/demo/*` routes. `ExampleBearerTokenMiddleware` owns those rules. See the [Notes sample](../SqlOS.OneCall.Api/README.md) for a bearer-only API and MCP server protected by the new path declarations.
 
 ## Application API map
 

@@ -25,7 +25,7 @@ Create an account through the SqlOS hosted AuthPage, return to a secure ASP.NET 
 - Docker running with enough memory for SQL Server or PostgreSQL;
 - ports `5080`, `5090`, `18890`, and `18891` available (plus `1435` when you opt into SQL Server).
 
-This quickstart uses the source at **SqlOS 4.2.0**. Local password authentication is the default, so the first run does not require Azure Communication Services, Twilio, or an OIDC provider.
+This quickstart uses the repository source; use the PR branch until the new hosting API release is published. The Todo host uses `ConfigureApplication` and explicitly registers the Razor Pages, hosted-demo, CLI, and broker clients. Local password authentication is the default, so the first run does not require Azure Communication Services, Twilio, or an OIDC provider.
 
 ## Run
 

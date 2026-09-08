@@ -137,10 +137,9 @@ Move from single-app mode to explicit multi-application setup when you have sepa
 - a customer portal plus an admin console
 - a web app plus a CLI
 - partner integrations
-- MCP or portable public clients
 - different audiences/resources that need separate policy
 
-At that point, use seeded clients, the dashboard, CIMD, DCR, and application assignments intentionally.
+Replace `UseSingleApplication` with `ConfigureApplication`, retain the host description, and explicitly seed the original client with the same ID, callback, audience, and scopes before adding clients. A same-host MCP server already works in single-application mode; it does not by itself require this migration. See [multiple applications](/docs/authserver/multiple-applications) for code and runnable examples.
 
 ## The principle
 

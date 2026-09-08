@@ -4,6 +4,10 @@ description: "Choose the shortest SqlOS path for your .NET application."
 order: 0
 ---
 
+<Callout type="info" title="Hosting API in the next release">
+  The application hosting additions shown here are part of [PR #363](https://github.com/ross-slaney/sqlos/pull/363). Until that release is published, run the examples from the PR branch. The published 4.2.0 package does not include these additions.
+</Callout>
+
 <Banner
   eyebrow="Start here"
   title="One application, described in one call"
@@ -78,7 +82,7 @@ Your frontend then talks to a typed state machine (`npm install @sqlos/headless`
   `AddSqlOS` does not automatically bind an `SqlOS` configuration section. Read values from `builder.Configuration`, your secret store, or environment variables and assign them in the options callback as shown above. (`options.UseSingleApplication(builder.Configuration)` binds just the application description from `SqlOS:Application`.)
 </Callout>
 
-Your browser still needs an OIDC client to start sign-in and handle the callback. See the [complete Notes sample](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api). Hosts with ASP.NET authentication must place `UseSqlOSSurfaceProtection()` after `UseAuthentication()` and before `UseAuthorization()`; place CORS and rewriting before the guard too.
+Your application uses its standard OIDC client library to start sign-in and handle the callback, with either hosted AuthPage or headless authentication UI. See the [complete Notes sample](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.OneCall.Api). Hosts with ASP.NET authentication must place `UseSqlOSSurfaceProtection()` after `UseAuthentication()` and before `UseAuthorization()`; place CORS and rewriting before the guard too.
 
 `UseSingleApplication` creates one first-party PKCE client, a callback at `{Origin}/auth/callback`, a default client allowlist (`openid`, `profile`, `email`, `offline_access`), and matching AuthPage branding. With [OpenID Provider mode](/docs/authserver/openid-provider) enabled (the default), authorization-server metadata advertises `openid`, `profile`, and `email`; `offline_access` stays on the client only for gateway compatibility and is not advertised, because SqlOS issues refresh tokens to code-flow clients without gating them on that scope. DCR stays off; CIMD and resource indicators turn on only when you declare `Mcp`.
 
@@ -97,7 +101,9 @@ Adding SqlOS to your application is the canonical integration path; running the 
 
 ## Second shape: many applications (identity provider)
 
-When other applications should sign in with your accounts — a separate SPA and API, partner apps, CLIs, or "Sign in with Acme" — the same host becomes an identity provider. Replace `UseSingleApplication` with `ConfigureApplication` to retain the host description, then declare each client explicitly with `options.AuthServer.SeedClient(...)` (or create them from the dashboard or admin API; all three share one validation and audit path). Everything from the standard flow still applies; you additionally get per-client consent, audiences, portable-client registration, and machine clients.
+When other applications should sign in with your accounts — another browser application, a CLI alongside it, or a partner app using "Sign in with Acme" — the same host becomes an identity provider. Replace `UseSingleApplication` with `ConfigureApplication` to retain the host description, then declare each client explicitly with `options.AuthServer.SeedClient(...)` (or create them from the dashboard or admin API; all three share one validation and audit path). Everything from the standard flow still applies; you additionally get per-client consent, audiences, portable-client registration, and machine clients.
+
+Runnable examples use this API: the [retail stack](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.Example.AppHost) serves Next.js, Angular, and Expo; the [Todo stack](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.Todo.AppHost) serves Razor Pages and the CLI. A separate frontend and API can still be one client application; API/MCP resources do not themselves require additional browser-client registrations.
 
 → [Multiple applications](/docs/authserver/multiple-applications) · [Sign in with X](/docs/guides/sign-in-with-x) · [Clients](/docs/authserver/clients)
 

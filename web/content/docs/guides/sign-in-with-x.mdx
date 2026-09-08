@@ -20,7 +20,14 @@ builder.AddSqlOS<AppDbContext>(
     db => db.UseSqlServer(connectionString),
     options =>
     {
+        options.ConfigureApplication("X", application =>
+        {
+            application.Origin = "https://x.example.com";
+            application.Brand(page => page.PrimaryColor = "#111827");
+        });
         var auth = options.AuthServer;
+        auth.PublicOrigin = "https://x.example.com";
+        auth.Issuer = "https://x.example.com/sqlos/auth";
 
         auth.SeedClient(client =>
         {

@@ -44,10 +44,10 @@ The normal path is incremental:
 
 ## Second shape: many applications
 
-When other applications should sign in with your accounts — a separate SPA and API, partner apps, CLIs, "Sign in with Acme" — the same host becomes an identity provider with explicit clients. Start there only when a second application exists.
+When other applications should sign in with your accounts — another browser app, a CLI alongside it, or a partner using "Sign in with Acme" — use `ConfigureApplication` with explicit client registrations. A separate frontend and API can still be one client application. Start there only when a second application exists.
 
 <CardGrid cols={2}>
-  <Card title="Multiple applications" description="Move from UseSingleApplication to explicit clients, consent, audiences, and machine clients." href="/docs/authserver/multiple-applications" />
+  <Card title="Multiple applications" description="Keep the host description with ConfigureApplication and register each client explicitly." href="/docs/authserver/multiple-applications" />
   <Card title="Sign in with X" description="Let other products use your accounts as their identity provider." href="/docs/guides/sign-in-with-x" />
 </CardGrid>
 

@@ -5,6 +5,10 @@ order: 2
 section: authserver
 ---
 
+<Callout type="info" title="Hosting API in the next release">
+  The application hosting additions shown here are part of [PR #363](https://github.com/ross-slaney/sqlos/pull/363). Until that release is published, run the examples from the PR branch. The published 4.2.0 package does not include these additions.
+</Callout>
+
 Use SqlOS as an OpenID Connect provider when several applications should sign in with your accounts. `ConfigureApplication` describes the host independently of client registration. It supports the same API and MCP surfaces, branding, headless UI, and authorization seeds as `UseSingleApplication`, but does not create a client.
 
 ## Graduate an existing application
@@ -84,6 +88,14 @@ Clients created through the dashboard and administration API coexist with code-o
 - **Upstream OIDC/SAML:** an enterprise or social identity provider authenticates a user into SqlOS. These connections are separate from downstream client registrations.
 - **Inbound SCIM:** an external directory provisions users and groups into a SqlOS organization. Enable `AuthServer.EnableScim`, then create a connection and group mappings through the [SCIM configuration workflow](/docs/authserver/scim-directory-sync). This does not replace SSO or application access policies.
 - **Outbound SCIM:** not implemented. SqlOS does not push accounts to downstream SaaS services; that requires a separate provisioning integration.
+
+## Runnable multi-application examples
+
+- [Retail host and clients](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.Example.AppHost): `ConfigureApplication("SqlOS Example", ...)` with `Brand`, `Headless`, and `Authorization`, plus explicit Next.js, Angular, and Expo clients. AppHost starts the two web clients; run Expo separately. Both web clients demonstrate hosted and headless sign-in against the same identity host.
+- [Todo host, Razor Pages, and CLI](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.Todo.AppHost): `ConfigureApplication("SqlOS Todo", ...)` with separate web and CLI registrations. Start AppHost, sign in at `http://localhost:5090`, then run `dotnet run --project examples/SqlOS.Todo.Cli -- login` for the device flow.
+- [Standalone App X and relying-party App Y](https://github.com/ross-slaney/sqlos/tree/main/examples/SqlOS.SignInWithX.AppHost): a dedicated `ConfigureApplication` provider and an Auth.js client, with third-party consent and remembered grants.
+
+The examples preserve their existing client IDs, callbacks, scopes, and audiences. `ConfigureApplication` changes how the host is described; the clients continue using their standard OIDC libraries.
 
 ## Other application types
 

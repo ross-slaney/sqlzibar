@@ -7,15 +7,28 @@ These samples are working reference applications, not isolated snippets. They sh
 | You want to… | Start here | Why |
 | --- | --- | --- |
 | See the smallest complete host | [One-call sample](SqlOS.OneCall.Api/README.md) | One `AddSqlOS` call declares the API and MCP surfaces, branding, and FGA model; no `MapSqlOS`, token filters, or MCP wiring in `Program.cs` |
-| Evaluate SqlOS in one focused application | [Todo API](SqlOS.Todo.Api/README.md) + `SqlOS.Todo.AppHost` | One .NET API, hosted sign-in, a protected Todo resource, FGA, and Swagger |
-| See the broadest feature set | [Full example AppHost](SqlOS.Example.AppHost/README.md) | Runs the example API, Todo API, SQL Server, and three web clients together |
+| Run multiple clients against one Todo host | [Todo API](SqlOS.Todo.Api/README.md) + `SqlOS.Todo.AppHost` | One .NET API, hosted sign-in, a protected Todo resource, FGA, and Swagger |
+| Run one identity host for Next.js, Angular, and Expo | [Full example AppHost](SqlOS.Example.AppHost/README.md) | Runs the example API, Todo API, SQL Server, and three web clients together |
 | Integrate a server-rendered .NET app | [ASP.NET Core client](SqlOS.Example.AspNetCoreWeb/README.md) | Razor Pages, ASP.NET Core OAuth middleware, PKCE, encrypted cookies, and a protected API call |
 | Integrate a JavaScript browser app | [Next.js client](SqlOS.Example.Web/README.md) or [Angular client](SqlOS.Example.AngularWeb/README.md) | Hosted and headless auth via Auth.js / angular-oauth2-oidc, token refresh, and FGA-filtered retail screens |
 | Integrate a native mobile app | [Expo client](SqlOS.Example.ExpoApp/README.md) | Custom-scheme callback, expo-auth-session, SecureStore, refresh tokens, and protected APIs |
 | Build a terminal sign-in flow | [Todo CLI](SqlOS.Todo.Cli/README.md) | OAuth device authorization, browser handoff, polling, token refresh, and CLI API calls |
 | Offer "Sign in with your app" to other apps | [Sign in with X](SqlOS.SignInWithX.AppHost/README.md) | SqlOS as an OpenID Provider: a Next.js + Auth.js relying party federates via pure OIDC discovery, with the consent screen and remembered grants |
 
-If you are new to the repository, start with the Todo sample. Use the full example when you want to compare client patterns or explore SSO, MFA, headless auth, and richer FGA models.
+Start with the [Notes sample](SqlOS.OneCall.Api/README.md) for `UseSingleApplication`, browser login, a protected API, and hosted MCP tools. Use Todo or the full example for `ConfigureApplication` with several explicit clients.
+
+## Which hosts use which API?
+
+| Host | Application configuration | Why |
+| --- | --- | --- |
+| [Notes](SqlOS.OneCall.Api/NotesApplication.cs) | `UseSingleApplication`, `Api`, `Mcp`, `Brand`, `Authorization` | One derived browser client and API/MCP surfaces in the same process |
+| [Retail](SqlOS.Example.Api/Program.cs) | `ConfigureApplication`, `Brand`, `Headless`, `Authorization` | Explicit Next.js, Angular, and Expo clients share one identity host |
+| [Todo](SqlOS.Todo.Api/Program.cs) | `ConfigureApplication`, `Brand`, optional `Headless`, `Authorization` | Explicit hosted-web, Razor Pages, CLI, and broker clients share the Todo resource |
+| [App X](SqlOS.SignInWithX.AppX/Program.cs) | `ConfigureApplication`, `Brand` | Dedicated OIDC provider with an explicit third-party App Y client; no local business API |
+
+The retail sample retains its demo credential middleware and public auth/demo routes. Todo retains its configured resource audience (`/api/todos` by default), per-operation scopes, and explicit metadata. Declaring a bearer-only `Api = "/api"` would change those contracts. Notes demonstrates the new derived API/MCP protection.
+
+The relying-party applications continue to use Auth.js, `angular-oauth2-oidc`, ASP.NET Core OpenID Connect, and Expo's client integration. They do not host SqlOS, so the .NET application-description API does not apply to them. Hosted AuthPage and `@sqlos/headless` continue to work through those clients.
 
 ## Run the full example
 

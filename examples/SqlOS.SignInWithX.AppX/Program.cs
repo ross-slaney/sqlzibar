@@ -24,16 +24,20 @@ builder.AddSqlOS<AppXDbContext>(
         auth.Issuer = $"{publicOrigin}/sqlos/auth";
         auth.PublicOrigin = publicOrigin;
 
-        auth.SeedAuthPage(page =>
+        options.ConfigureApplication("X", application =>
         {
-            page.PageTitle = "Sign in with X";
-            page.PageSubtitle = "One X account signs you in to every app that trusts X.";
-            page.PrimaryColor = "#111827";
-            page.AccentColor = "#7c3aed";
-            page.BackgroundColor = "#faf5ff";
-            page.Layout = "split";
-            page.EnablePasswordSignup = true;
-            page.EnabledCredentialTypes = ["password"];
+            application.Origin = publicOrigin;
+            application.Brand(page =>
+            {
+                page.PageTitle = "Sign in with X";
+                page.PageSubtitle = "One X account signs you in to every app that trusts X.";
+                page.PrimaryColor = "#111827";
+                page.AccentColor = "#7c3aed";
+                page.BackgroundColor = "#faf5ff";
+                page.Layout = "split";
+                page.EnablePasswordSignup = true;
+                page.EnabledCredentialTypes = ["password"];
+            });
         });
 
         auth.SeedAuthEmails(email =>

@@ -107,7 +107,7 @@ var writes = app.MapGroup("/api/admin")
 
 Scope bounds the *client*; per-user, per-resource decisions stay with FGA. See [Scopes and Permissions](/docs/authserver/scopes-and-permissions).
 
-`RequireSqlOSAccessToken` remains the explicit alternative for hosts that do not use single-application mode or that protect several audiences; see the [Hosting API](/docs/reference/hosting-api#requiresqlosaccesstoken).
+`RequireSqlOSAccessToken` remains the explicit alternative for hosts that need explicit route groups, custom resource identifiers, or several audiences; `ConfigureApplication` also supports derived `Api` and `Mcp` protection. See the [Hosting API](/docs/reference/hosting-api#requiresqlosaccesstoken).
 
 <Callout type="info" title="Audience follows the API, not the login sample">
   The runnable ASP.NET Core sample requests the Todo audience at `http://localhost:5080/api/todos`. When adapting that handler to this standalone host, register and request `http://localhost:5050/api`. A valid token for the Todo API is correctly rejected here.

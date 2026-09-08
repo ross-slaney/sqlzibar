@@ -7,6 +7,19 @@ const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
 const snippetSpecs = [
   {
+    name: "standalone multi-client host", relativePath: "web/content/docs/guides/standalone-identity-server.mdx",
+    heading: "## 1. Configure the auth host", marker: "var builder = WebApplication.CreateBuilder(args);",
+    wrap: asCompleteProgram,
+  },
+  ...[
+    ["web/content/docs/guides/standalone-identity-server.mdx", "## 5. Validate tokens in resource APIs"],
+    ["web/content/docs/reference/standalone-identity-server.mdx", "## Resource API validation"],
+  ].map(([relativePath, heading]) => ({
+    name: "separate resource API", relativePath, heading,
+    marker: "builder.Services.AddAuthentication",
+    wrap: (snippet) => `var builder = WebApplication.CreateBuilder(args);\n${snippet}`,
+  })),
+  {
     name: "multiple-application migration", relativePath: "web/content/docs/authserver/multiple-applications.mdx",
     heading: "## Graduate an existing application", marker: "builder.AddSqlOS<AppDbContext>",
     wrap: (snippet) => snippet.replace("builder.AddSqlOS<AppDbContext>", `using SqlOS;
@@ -475,6 +488,7 @@ try {
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
     <ProjectReference Include="${sourceProject}" />
     <ProjectReference Include="${path.join(repoRoot, "examples", "SqlOS.OneCall.Api", "SqlOS.OneCall.Api.csproj")}" />
   </ItemGroup>

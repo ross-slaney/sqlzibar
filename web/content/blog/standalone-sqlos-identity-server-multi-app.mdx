@@ -44,6 +44,11 @@ Each application surface gets its own OAuth client. That keeps redirect URIs, cl
 ```csharp
 builder.AddSqlOS<ExampleAppDbContext>(options =>
 {
+    options.ConfigureApplication("Acme Identity", application =>
+    {
+        application.Origin = "https://auth.example.com";
+        application.Brand(page => page.PrimaryColor = "#0f172a");
+    });
     var auth = options.AuthServer;
     auth.Issuer = "https://auth.example.com/sqlos/auth";
     auth.DefaultAudience = "https://api.example.com";

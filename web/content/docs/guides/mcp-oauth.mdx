@@ -19,7 +19,7 @@ section: guides
 This guide builds **Taskrail**, a fictional MCP server at `https://mcp.taskrail.test`. A portable client identifies itself with a metadata document, completes authorization code with PKCE, and receives a SqlOS access token whose `aud` is exactly the Taskrail MCP resource.
 
 <Callout type="info" title="Hosting the MCP server in your own SqlOS app? Use the one-call path">
-  When the MCP server lives in the same host as SqlOS, declare it inside `UseSingleApplication` with `app.Mcp("/mcp", mcp => mcp.WithTools<MyTools>())` from the `SqlOS.Mcp` package. SqlOS then serves the protected-resource document, validates the audience under `/mcp`, enables CIMD and resource indicators, and hosts the server; steps 1, 2, and the route-group protection below are derived for you. See [MCP server](/docs/authserver/mcp-server). This guide covers the explicit, multi-client setup where the authorization server and the MCP resource are separate deployments.
+  When the MCP server lives in the same host as SqlOS, declare it inside `UseSingleApplication` or `ConfigureApplication` with `app.Mcp("/mcp", mcp => mcp.WithTools<MyTools>())` from the `SqlOS.Mcp` package. SqlOS then serves the protected-resource document, validates the audience under `/mcp`, enables CIMD and resource indicators, and hosts the server; steps 1, 2, and the route-group protection below are derived for you. See [MCP server](/docs/authserver/mcp-server). This guide covers the explicit, multi-client setup where the authorization server and the MCP resource are separate deployments.
 </Callout>
 
 <Callout type="info" title="Use the simpler client path when you can">

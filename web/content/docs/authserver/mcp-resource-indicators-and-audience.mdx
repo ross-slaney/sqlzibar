@@ -76,7 +76,7 @@ Your protected resource should still:
 - return `WWW-Authenticate: Bearer resource_metadata="..."`
 - validate issuer, signature, expiry, and audience
 
-Single-application hosts get all three from the `Api`/`Mcp` declarations: SqlOS serves `/.well-known/oauth-protected-resource` for the API and `/.well-known/oauth-protected-resource{Mcp}` for the MCP surface, and challenges unauthenticated requests under each prefix with the matching `resource_metadata`. The Todo sample demonstrates the explicit version end to end.
+Hosts using `UseSingleApplication` or `ConfigureApplication` get all three from the `Api`/`Mcp` declarations: SqlOS serves `/.well-known/oauth-protected-resource` for the API and `/.well-known/oauth-protected-resource{Mcp}` for the MCP surface, and challenges unauthenticated requests under each prefix with the matching `resource_metadata`. The Todo sample demonstrates the explicit version end to end.
 
 ## Recommended rule of thumb
 

@@ -119,26 +119,145 @@ builder.AddSqlOS<ExampleAppDbContext>(
         var enableHeadlessAuthPage = builder.Configuration.GetValue<bool?>("SqlOS:EnableHeadlessAuthPage") ?? true;
         var enableMagicLink = builder.Configuration.GetValue<bool?>("SqlOS:EnableMagicLink") ?? false;
 
-        auth.SeedAuthPage(page =>
+        // One identity host serves the Next.js, Angular, and Expo clients below.
+        options.ConfigureApplication("SqlOS Example", application =>
         {
-            page.PageTitle = "Sign in";
-            page.PageSubtitle = "Use the hosted SqlOS auth page to sign in to the example application.";
-            page.PrimaryColor = "#2563eb";
-            page.AccentColor = "#0f172a";
-            page.BackgroundColor = "#f8fafc";
-            page.Layout = "split";
-            page.EnablePasswordSignup = true;
-            page.EnabledCredentialTypes = new[]
+            application.Origin = auth.PublicOrigin
+                ?? new Uri(auth.Issuer).GetLeftPart(UriPartial.Authority);
+            // The retail demo also accepts demo service-account and agent identities,
+            // and has public /api/v1/auth and /api/demo routes. Its existing middleware
+            // owns that mixed boundary; declaring Api = "/api" would make it bearer-only.
+            application.Brand(page =>
+            {
+                page.PageTitle = "Sign in";
+                page.PageSubtitle = "Use the hosted SqlOS auth page to sign in to the example application.";
+                page.PrimaryColor = "#2563eb";
+                page.AccentColor = "#0f172a";
+                page.BackgroundColor = "#f8fafc";
+                page.Layout = "split";
+                page.EnablePasswordSignup = true;
+                page.EnabledCredentialTypes = new[]
+                    {
+                        "password",
+                        "email_otp",
+                        enablePhoneOtp ? "phone_otp" : null,
+                        enableMagicLink ? "magic_link" : null
+                    }
+                    .Where(static credential => credential != null)
+                    .Select(static credential => credential!)
+                    .ToList();
+            });
+
+            if (enableHeadlessAuthPage)
+            {
+                application.Headless(headless =>
                 {
-                    "password",
-                    "email_otp",
-                    enablePhoneOtp ? "phone_otp" : null,
-                    enableMagicLink ? "magic_link" : null
-                }
-                .Where(static credential => credential != null)
-                .Select(static credential => credential!)
-                .ToList();
+                    headless.BuildUiUrl = ctx =>
+                    {
+                        var origin = ctx.HttpContext.Items["HeadlessFrontendOrigin"] as string
+                            ?? headlessFrontendUrl;
+                        var query = new Dictionary<string, string?>
+                        {
+                            ["request"] = ctx.RequestId,
+                            ["view"] = ctx.View,
+                            ["error"] = ctx.Error,
+                            ["email"] = ctx.Email,
+                            ["pendingToken"] = ctx.PendingToken,
+                            ["mfaToken"] = ctx.MfaToken,
+                            ["displayName"] = ctx.DisplayName,
+                        };
+                        return QueryHelpers.AddQueryString(
+                            $"{origin.TrimEnd('/')}/auth/authorize", query);
+                    };
+
+                    headless.OnHeadlessSignupAsync = async (ctx, cancellationToken) =>
+                    {
+                        var logger = ctx.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("HeadlessSignup");
+                        var dbContext = ctx.HttpContext.RequestServices.GetRequiredService<ExampleAppDbContext>();
+
+                        var firstName = ctx.CustomFields?["firstName"]?.GetValue<string>();
+                        var lastName = ctx.CustomFields?["lastName"]?.GetValue<string>();
+                        var referralSource = ctx.CustomFields?["referralSource"]?.GetValue<string>()?.Trim();
+
+                        if (string.IsNullOrWhiteSpace(referralSource))
+                        {
+                            throw new SqlOSHeadlessValidationException(
+                                "Tell us how you heard about SqlOS.",
+                                new Dictionary<string, string>(StringComparer.Ordinal)
+                                {
+                                    ["referralSource"] = "Select a referral source to complete signup."
+                                });
+                        }
+
+                        var profile = await dbContext.ExampleUserProfiles
+                            .FirstOrDefaultAsync(x => x.SqlOSUserId == ctx.User.Id, cancellationToken);
+
+                        if (profile == null)
+                        {
+                            profile = new ExampleUserProfile
+                            {
+                                SqlOSUserId = ctx.User.Id,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                            dbContext.ExampleUserProfiles.Add(profile);
+                        }
+
+                        profile.DefaultEmail = ctx.User.DefaultEmail ?? string.Empty;
+                        profile.DisplayName = ctx.User.DisplayName ?? ctx.User.DefaultEmail ?? "Example User";
+                        profile.OrganizationId = ctx.Organization?.Id;
+                        profile.OrganizationName = ctx.Organization?.Name;
+                        profile.ReferralSource = referralSource!;
+                        profile.UpdatedAt = DateTime.UtcNow;
+
+                        await dbContext.SaveChangesAsync(cancellationToken);
+
+                        logger.LogInformation(
+                            "Headless signup completed: {Email}, Org={OrgName}, FirstName={First}, LastName={Last}, Referral={Referral}",
+                            ctx.User.DefaultEmail,
+                            ctx.Organization?.Name,
+                            firstName,
+                            lastName,
+                            referralSource);
+                    };
+                });
+            }
+
+            application.Authorization(seed =>
+            {
+                seed.ResourceType(
+                    ExampleFgaService.OrganizationResourceTypeId,
+                    "Organization",
+                    "Organization root for example workspace access.");
+                seed.ResourceType(
+                    ExampleFgaService.WorkspaceResourceTypeId,
+                    "Workspace",
+                    "Workspace resources in the example application.");
+                seed.Permission(
+                    "perm_workspace_view",
+                    ExampleFgaService.WorkspaceViewPermission,
+                    "View workspaces",
+                    ExampleFgaService.WorkspaceResourceTypeId);
+                seed.Permission(
+                    "perm_workspace_manage",
+                    ExampleFgaService.WorkspaceManagePermission,
+                    "Manage workspaces",
+                    ExampleFgaService.OrganizationResourceTypeId);
+                seed.Role(
+                    "role_org_member",
+                    ExampleFgaService.OrgMemberRole,
+                    "Organization Member");
+                seed.Role(
+                    "role_org_admin",
+                    ExampleFgaService.OrgAdminRole,
+                    "Organization Admin");
+                seed.RolePermission(ExampleFgaService.OrgMemberRole, ExampleFgaService.WorkspaceViewPermission);
+                seed.RolePermission(ExampleFgaService.OrgAdminRole, ExampleFgaService.WorkspaceViewPermission);
+                seed.RolePermission(ExampleFgaService.OrgAdminRole, ExampleFgaService.WorkspaceManagePermission);
+            });
         });
+
         auth.SeedAuthEmails(email =>
         {
             email.ApplicationName = "SqlOS Example";
@@ -191,115 +310,6 @@ builder.AddSqlOS<ExampleAppDbContext>(
                 microsoftOidcTenant,
                 microsoftCallbackUri);
         }
-
-        if (enableHeadlessAuthPage)
-        {
-            auth.UseHeadlessAuthPage(headless =>
-            {
-                headless.BuildUiUrl = ctx =>
-                {
-                    var origin = ctx.HttpContext.Items["HeadlessFrontendOrigin"] as string
-                        ?? headlessFrontendUrl;
-                    var query = new Dictionary<string, string?>
-                    {
-                        ["request"] = ctx.RequestId,
-                        ["view"] = ctx.View,
-                        ["error"] = ctx.Error,
-                        ["email"] = ctx.Email,
-                        ["pendingToken"] = ctx.PendingToken,
-                        ["mfaToken"] = ctx.MfaToken,
-                        ["displayName"] = ctx.DisplayName,
-                    };
-                    return QueryHelpers.AddQueryString(
-                        $"{origin.TrimEnd('/')}/auth/authorize", query);
-                };
-
-                headless.OnHeadlessSignupAsync = async (ctx, cancellationToken) =>
-                {
-                    var logger = ctx.HttpContext.RequestServices
-                        .GetRequiredService<ILoggerFactory>()
-                        .CreateLogger("HeadlessSignup");
-                    var dbContext = ctx.HttpContext.RequestServices.GetRequiredService<ExampleAppDbContext>();
-
-                    var firstName = ctx.CustomFields?["firstName"]?.GetValue<string>();
-                    var lastName = ctx.CustomFields?["lastName"]?.GetValue<string>();
-                    var referralSource = ctx.CustomFields?["referralSource"]?.GetValue<string>()?.Trim();
-
-                    if (string.IsNullOrWhiteSpace(referralSource))
-                    {
-                        throw new SqlOSHeadlessValidationException(
-                            "Tell us how you heard about SqlOS.",
-                            new Dictionary<string, string>(StringComparer.Ordinal)
-                            {
-                                ["referralSource"] = "Select a referral source to complete signup."
-                            });
-                    }
-
-                    var profile = await dbContext.ExampleUserProfiles
-                        .FirstOrDefaultAsync(x => x.SqlOSUserId == ctx.User.Id, cancellationToken);
-
-                    if (profile == null)
-                    {
-                        profile = new ExampleUserProfile
-                        {
-                            SqlOSUserId = ctx.User.Id,
-                            CreatedAt = DateTime.UtcNow
-                        };
-                        dbContext.ExampleUserProfiles.Add(profile);
-                    }
-
-                    profile.DefaultEmail = ctx.User.DefaultEmail ?? string.Empty;
-                    profile.DisplayName = ctx.User.DisplayName ?? ctx.User.DefaultEmail ?? "Example User";
-                    profile.OrganizationId = ctx.Organization?.Id;
-                    profile.OrganizationName = ctx.Organization?.Name;
-                    profile.ReferralSource = referralSource!;
-                    profile.UpdatedAt = DateTime.UtcNow;
-
-                    await dbContext.SaveChangesAsync(cancellationToken);
-
-                    logger.LogInformation(
-                        "Headless signup completed: {Email}, Org={OrgName}, FirstName={First}, LastName={Last}, Referral={Referral}",
-                        ctx.User.DefaultEmail,
-                        ctx.Organization?.Name,
-                        firstName,
-                        lastName,
-                        referralSource);
-                };
-            });
-        }
-
-        options.Fga.Seed(seed =>
-        {
-            seed.ResourceType(
-                ExampleFgaService.OrganizationResourceTypeId,
-                "Organization",
-                "Organization root for example workspace access.");
-            seed.ResourceType(
-                ExampleFgaService.WorkspaceResourceTypeId,
-                "Workspace",
-                "Workspace resources in the example application.");
-            seed.Permission(
-                "perm_workspace_view",
-                ExampleFgaService.WorkspaceViewPermission,
-                "View workspaces",
-                ExampleFgaService.WorkspaceResourceTypeId);
-            seed.Permission(
-                "perm_workspace_manage",
-                ExampleFgaService.WorkspaceManagePermission,
-                "Manage workspaces",
-                ExampleFgaService.OrganizationResourceTypeId);
-            seed.Role(
-                "role_org_member",
-                ExampleFgaService.OrgMemberRole,
-                "Organization Member");
-            seed.Role(
-                "role_org_admin",
-                ExampleFgaService.OrgAdminRole,
-                "Organization Admin");
-            seed.RolePermission(ExampleFgaService.OrgMemberRole, ExampleFgaService.WorkspaceViewPermission);
-            seed.RolePermission(ExampleFgaService.OrgAdminRole, ExampleFgaService.WorkspaceViewPermission);
-            seed.RolePermission(ExampleFgaService.OrgAdminRole, ExampleFgaService.WorkspaceManagePermission);
-        });
     });
 
 builder.Services.AddScoped<ExampleFgaService>();
