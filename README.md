@@ -17,7 +17,7 @@ Start with either shape:
 
 Both use the same users, sessions, organizations, FGA services, and dashboard. An API and an MCP endpoint are protected resources, not additional browser applications: one application can expose both.
 
-The hosting APIs below target the next release. Until it is published, run the [Notes sample from this branch](examples/SqlOS.OneCall.Api), which exercises browser sign-in, a protected API, and MCP together.
+The [Notes sample](examples/SqlOS.OneCall.Api) exercises browser sign-in, a protected API, and MCP together with the hosting APIs below.
 
 ## One application: sign in and call your API
 
@@ -28,15 +28,15 @@ The hosting APIs below target the next release. Until it is published, run the [
 Use .NET 9, EF Core 9, and an accessible SQL Server or PostgreSQL database. The currently published package version is:
 
 ```bash
-dotnet add package SqlOS --version 4.2.0
+dotnet add package SqlOS --version 5.0.0
 dotnet add package Microsoft.AspNetCore.Authentication.OpenIdConnect --version 9.0.0
 ```
 
 Optional packages for the MCP and custom-login examples:
 
 ```bash
-dotnet add package SqlOS.Mcp --version 4.2.0
-npm install @sqlos/headless@4.2.0
+dotnet add package SqlOS.Mcp --version 5.0.0
+npm install @sqlos/headless@5.0.0
 ```
 
 This complete `Program.cs` puts the provider and its browser client in one process. Supply `ConnectionStrings:DefaultConnection` through user secrets or your deployment configuration, then run on `http://localhost:5050` in Development. Use an HTTPS origin in production.
